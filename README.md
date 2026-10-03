@@ -77,7 +77,27 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Server will be available at: http://localhost:8000
+Server will be available at: http://localhost:8000 (`GET /health` for a liveness check, `/docs` for Swagger)
+
+### Available Endpoints
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/health` | No | Service health check |
+| `GET` | `/` | No | Service metadata |
+| `POST` | `/api/auth/register` | No | Create a member account, returns a JWT |
+| `POST` | `/api/auth/login` | No | Exchange credentials for a JWT |
+| `GET` | `/api/auth/me` | Bearer | Return the authenticated profile |
+
+### Database Tables
+
+Tables are declared in `backend/app/models/` (`users`, `books`). Until Alembic
+migrations are generated, create them once with:
+
+```python
+from app.database import Base, engine
+Base.metadata.create_all(bind=engine)
+```
 
 ### Frontend Setup
 
