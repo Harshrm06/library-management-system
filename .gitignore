@@ -62,6 +62,9 @@ out/
 # Logs
 logs/
 *.log
+!logs/.gitkeep
+!backend/logs/
+!backend/logs/.gitkeep
 
 # OS
 .DS_Store

@@ -28,6 +28,37 @@ A full-stack web application for library book management with user authenticatio
 
 ## 📂 Project Structure
 
+```
+library-management-system/
+├── backend/                    # Python FastAPI backend
+│   ├── app/
+│   │   ├── controllers/        # Request handling / business logic
+│   │   ├── middleware/         # Custom middleware (auth, logging)
+│   │   ├── models/             # SQLAlchemy models
+│   │   ├── routes/             # API route definitions
+│   │   ├── schemas/            # Pydantic schemas
+│   │   └── utils/              # Helpers (JWT, hashing, config)
+│   ├── migrations/             # Alembic migrations
+│   │   └── versions/
+│   ├── logs/                   # Application logs (git-ignored)
+│   ├── .env.example            # Environment template
+│   └── requirements.txt
+├── frontend/                   # React frontend
+│   ├── src/
+│   │   ├── pages/              # Route-level screens
+│   │   ├── components/         # Reusable UI components
+│   │   ├── context/            # React context providers
+│   │   ├── services/           # API client modules
+│   │   ├── hooks/              # Custom hooks
+│   │   ├── utils/              # Helper functions
+│   │   ├── styles/             # CSS / Tailwind entry files
+│   │   └── App.jsx
+│   ├── .env.example            # Environment template
+│   └── package.json
+├── docs/                       # Project documentation
+├── .gitignore
+└── README.md
+```
 
 ## 🚀 Getting Started
 
@@ -111,10 +142,12 @@ Once backend is running, visit:
 
 ## 📚 Documentation
 
-- [Backend README](./backend/README.md)
-- [Frontend README](./frontend/README.md)
-- [API Documentation](./docs/API.md)
-- [Database Schema](./docs/DATABASE.md)
+All project documentation lives in [`docs/`](./docs):
+
+- **Backend:** `backend/requirements.txt`, `backend/.env.example`
+- **Frontend:** `frontend/package.json`, `frontend/.env.example`
+- **Product requirements:** `Library_Management_System_PRD.md` (repository root)
+- **Planned docs:** `docs/API.md`, `docs/DATABASE.md` (added during backend scaffolding)
 
 ## 👥 Team
 
