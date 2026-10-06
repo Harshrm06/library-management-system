@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, Generator
 
 from sqlalchemy import create_engine
@@ -13,6 +14,19 @@ from app.config import settings
 
 class Base(DeclarativeBase):
     """Declarative base class shared by every ORM model."""
+
+
+def utcnow() -> datetime:
+    """Return the current UTC time as a naive datetime.
+
+    Models use this for ``created_at`` / ``updated_at`` defaults. The result is
+    naive on purpose: MySQL ``DATETIME`` columns do not store a time zone, so
+    keeping every timestamp naive avoids aware/naive comparison errors.
+
+    Returns:
+        datetime: The current UTC time without a tzinfo.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def build_engine_kwargs() -> Dict[str, Any]:

@@ -20,11 +20,11 @@ A full-stack web application for library book management with user authenticatio
 - **Migrations:** Alembic
 
 ### Frontend
-- **Framework:** React 18
-- **Styling:** Tailwind CSS
-- **UI Components:** Material UI
-- **HTTP Client:** Axios
-- **Build Tool:** Vite
+- **Framework:** React 18 with React Router 6
+- **Styling:** Tailwind CSS 3
+- **UI Components:** Material UI 5 (form controls, chips, alerts)
+- **HTTP Client:** Axios 1 (interceptors attach the bearer token)
+- **Build Tool:** Vite 5
 
 ## 📂 Project Structure
 
@@ -37,9 +37,12 @@ library-management-system/
 │   │   ├── models/             # SQLAlchemy models
 │   │   ├── routes/             # API route definitions
 │   │   ├── schemas/            # Pydantic schemas
-│   │   └── utils/              # Helpers (JWT, hashing, config)
-│   ├── migrations/             # Alembic migrations
-│   │   └── versions/
+│   │   └── utils/              # Helpers (JWT, hashing, validators)
+│   ├── alembic.ini              # Alembic configuration
+│   ├── alembic/                 # Migration environment
+│   │   ├── env.py
+│   │   ├── script.py.mako
+│   │   └── versions/            # Revision scripts
 │   ├── logs/                   # Application logs (git-ignored)
 │   ├── .env.example            # Environment template
 │   └── requirements.txt
@@ -98,7 +101,7 @@ CREATE DATABASE library_db;
 EXIT;
 ```
 
-6. Run migrations:
+6. Run migrations (see [Database Migrations](#database-migrations)):
 ```bash
 alembic upgrade head
 ```
@@ -110,25 +113,114 @@ uvicorn app.main:app --reload
 
 Server will be available at: http://localhost:8000 (`GET /health` for a liveness check, `/docs` for Swagger)
 
+### Database Migrations
+
+Schema changes are versioned with [Alembic](https://alembic.sqlalchemy.org/).
+Configuration lives in `backend/alembic.ini` and `backend/alembic/env.py`; the
+database URL is read from `DATABASE_URL` in `backend/.env`, never from the ini
+file. Run every command from `backend/`.
+
+**Apply migrations**
+
+```bash
+alembic upgrade head        # apply everything
+alembic upgrade +1          # apply one step
+alembic current             # show the applied revision
+```
+
+**Create a new migration**
+
+```bash
+# 1. change the model in app/models/
+alembic revision --autogenerate -m "Initial migration: Create users and books tables"
+# 2. read the generated file in alembic/versions/, fix anything Alembic guessed
+# 3. prove both directions work
+alembic upgrade head && alembic downgrade -1 && alembic upgrade head
+```
+
+**Roll back**
+
+```bash
+alembic downgrade -1        # undo the last revision
+alembic downgrade <id>      # undo down to a specific revision
+alembic downgrade base      # undo everything
+```
+
+The first revision, `alembic/versions/001_initial_migration.py`, creates the
+`users` and `books` tables with their unique constraints and indexes. See
+[`docs/MIGRATION_GUIDE.md`](./docs/MIGRATION_GUIDE.md) for merge/conflict
+handling and best practices.
+
 ### Available Endpoints
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/health` | No | Service health check |
 | `GET` | `/` | No | Service metadata |
-| `POST` | `/api/auth/register` | No | Create a member account, returns a JWT |
+| `POST` | `/api/auth/register` | No | Create a member account (201) |
 | `POST` | `/api/auth/login` | No | Exchange credentials for a JWT |
 | `GET` | `/api/auth/me` | Bearer | Return the authenticated profile |
+| `PUT` | `/api/auth/me` | Bearer | Update the authenticated profile |
+| `POST` | `/api/auth/refresh-token` | Bearer | Issue a new token for the caller |
+| `POST` | `/api/auth/logout` | Bearer | Acknowledge logout (stateless) |
+
+### Response Format
+
+Successful responses use a `{ success, message, data, timestamp }` envelope and
+errors use `{ success: false, message, error, code, timestamp }`.
+
+```jsonc
+// POST /api/auth/login
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "token_type": "bearer",
+    "expires_in": 86400,
+    "user": { "id": 1, "email": "member@example.com", "role": "member", "...": "..." }
+  },
+  "timestamp": "2026-01-01T12:00:00+00:00"
+}
+```
+
+Registration accepts passwords of at least 6 characters containing at least one
+letter and one number. Passwords are hashed with bcrypt and never returned.
 
 ### Database Tables
 
-Tables are declared in `backend/app/models/` (`users`, `books`). Until Alembic
-migrations are generated, create them once with:
+Tables are declared in `backend/app/models/` (`users`, `books`) and created by
+Alembic revision `001_initial_migration.py`:
+
+```bash
+alembic upgrade head
+```
+
+For throwaway experiments only, the metadata can be pushed directly:
 
 ```python
 from app.database import Base, engine
 Base.metadata.create_all(bind=engine)
 ```
+
+Do not mix the two: `create_all()` leaves Alembic unaware of the schema, and
+the next `upgrade head` will fail with "table already exists".
+
+### Verifying the Backend
+
+A standalone script checks every backend component without needing MySQL:
+
+```bash
+python backend/test_verification.py
+```
+
+It prints one line per assertion (`✅` / `❌`), a `X/Y tests passed` summary
+and exits non-zero on failure. Useful environment switches:
+
+| Variable | Effect |
+| --- | --- |
+| `VERIFY_ASCII=1` | Use `[PASS]` / `[FAIL]` instead of the Unicode markers |
+| `VERIFY_LOGS=1` | Keep the application's INFO/WARNING log output |
 
 ### Frontend Setup
 
@@ -144,7 +236,8 @@ npm install
 
 3. Create `.env.local` from `.env.example`:
 ```bash
-cp .env.example .env.local
+cp .env.example .env.local     # Windows: copy .env.example .env.local
+# VITE_API_BASE_URL=http://localhost:8000
 ```
 
 4. Start development server:
@@ -153,6 +246,35 @@ npm run dev
 ```
 
 App will be available at: http://localhost:5173
+
+### Frontend Structure
+
+```
+frontend/
+├── index.html
+├── vite.config.js               # Vite + React plugin, /api dev proxy
+├── tailwind.config.js           # Tailwind theme (brand + ink palettes)
+├── postcss.config.js            # Tailwind + autoprefixer
+├── .eslintrc.cjs                # ESLint 8 config used by `npm run lint`
+└── src/
+    ├── main.jsx                 # Mounts React, BrowserRouter, AuthProvider
+    ├── App.jsx                  # Routes and public/protected split
+    ├── pages/                   # Login, Register, Catalog, Detail, 404, 403
+    ├── components/              # Header, ProtectedRoute, ErrorBoundary, BookCard,
+    │                            # FormInput, FormError, LoadingSpinner, Toast, Skeleton
+    ├── context/AuthContext.jsx  # Session state (token + user) and actions
+    ├── hooks/useAuth.js         # Access the auth context
+    ├── services/                # api.js (axios), authService.js (endpoints)
+    ├── utils/                   # validators.js, constants.js, helpers.js
+    └── styles/index.css         # Tailwind directives + component classes
+```
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Vite dev server on :5173, proxying `/api` to :8000 |
+| `npm run build` | Production bundle into `dist/` |
+| `npm run preview` | Serve the production bundle locally |
+| `npm run lint` | ESLint over `src` |
 
 ## 📖 API Documentation
 
@@ -166,6 +288,7 @@ All project documentation lives in [`docs/`](./docs):
 
 - **Backend:** `backend/requirements.txt`, `backend/.env.example`
 - **Frontend:** `frontend/package.json`, `frontend/.env.example`
+- **Database migrations:** [`docs/MIGRATION_GUIDE.md`](./docs/MIGRATION_GUIDE.md)
 - **Product requirements:** `Library_Management_System_PRD.md` (repository root)
 - **Planned docs:** `docs/API.md`, `docs/DATABASE.md` (added during backend scaffolding)
 

@@ -4,6 +4,7 @@ Reference documents for the Library Management System.
 
 | Document | Status | Description |
 | --- | --- | --- |
+| `MIGRATION_GUIDE.md` | Current | Alembic workflow: create, apply, roll back, merge, best practices |
 | `API.md` | Planned | Endpoint reference for the FastAPI backend (Swagger: http://localhost:8000/docs) |
 | `DATABASE.md` | Planned | Schema, relationships, and migration notes |
 | `TESTING.md` | Planned | Manual and Postman test procedures |

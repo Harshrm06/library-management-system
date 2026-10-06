@@ -1,8 +1,8 @@
-"""JWT verification middleware and authorization dependencies."""
+"""JWT authentication middleware and authorization dependencies."""
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, Dict, Iterable, Optional
+from typing import Any, Callable, Dict, Iterable, Optional
 
 from fastapi import Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,52 +12,56 @@ from starlette.types import ASGIApp
 
 from app.database import get_db
 from app.models.user import User, UserRole
-from app.utils.exceptions import AuthenticationError, PermissionDeniedError
-from app.utils.jwt_utils import decode_token
+from app.utils.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
+from app.utils.jwt_utils import verify_token
+
 
 bearer_scheme = HTTPBearer(auto_error=False, description="JWT access token")
 
 PUBLIC_PATHS: tuple[str, ...] = ("/health", "/docs", "/redoc", "/openapi.json")
 
+ROLE_ADMIN: str = UserRole.ADMIN.value
+ROLE_MEMBER: str = UserRole.MEMBER.value
 
-def _extract_token(
+
+def extract_token(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials],
-) -> str | None:
-    """Return a bearer token from the request headers or query string.
-
-    Args:
-        request: The incoming request.
-        credentials: Credentials parsed by :class:`HTTPBearer`, if present.
-
-    Returns:
-        str | None: The raw token when one is available.
-    """
+    credentials: Optional[HTTPAuthorizationCredentials] = None,
+) -> Optional[str]:
+    """Return the bearer token carried by a request."""
     if credentials is not None:
         return credentials.credentials
-    header: str | None = request.headers.get("Authorization")
+    if request is None:
+        return None
+    header: Optional[str] = request.headers.get("Authorization")
     if header and header.lower().startswith("bearer "):
         return header.split(" ", 1)[1].strip()
-    token_param: str | None = request.query_params.get("token")
-    return token_param
+    return request.query_params.get("token")
+
+
+def _user_context(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a decoded token payload into the request user context."""
+    user_id: Any = payload.get("user_id", payload.get("sub"))
+    if user_id is None:
+        raise UnauthorizedError(
+            "Invalid authentication token",
+            detail="The token does not identify a user.",
+            code="invalid_token",
+        )
+    role: Any = payload.get("role", ROLE_MEMBER)
+    return {
+        "id": user_id,
+        "user_id": user_id,
+        "email": payload.get("email"),
+        "role": role.value if hasattr(role, "value") else role,
+        "token": payload,
+    }
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Attach the decoded JWT payload to ``request.state`` when present.
-
-    The middleware never rejects a request on its own; authorization is
-    enforced by :func:`get_current_user` and :func:`require_role` so that
-    public endpoints stay reachable. Paths listed in :data:`PUBLIC_PATHS`
-    are always skipped.
-    """
+    """Attach the decoded JWT payload to request.state when present."""
 
     def __init__(self, app: ASGIApp, *, public_paths: Iterable[str] = PUBLIC_PATHS) -> None:
-        """Initialize the middleware.
-
-        Args:
-            app: The ASGI application being wrapped.
-            public_paths: Path prefixes that skip token decoding.
-        """
         super().__init__(app)
         self.public_paths: tuple[str, ...] = tuple(public_paths)
 
@@ -66,95 +70,104 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        """Decode the bearer token, when one is supplied, then call the next hop.
+        """Decode the bearer token and pass preflight requests through untouched.
 
-        Args:
-            request: The incoming request.
-            call_next: The next middleware or route handler.
-
-        Returns:
-            Response: The response produced by the next hop.
+        A CORS preflight carries no credentials by design, so there is nothing to
+        authenticate here. The request is forwarded with ``call_next`` rather than
+        answered with a bare ``Response``: returning early would skip every
+        middleware nested inside this one, including ``CORSMiddleware``, and the
+        browser would receive a 200 with no ``Access-Control-Allow-Origin``
+        header and block the real request that followed.
         """
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         request.state.user_payload = None
         if not request.url.path.startswith(self.public_paths):
-            token: str | None = _extract_token(request, None)
+            token: Optional[str] = extract_token(request)
             if token:
                 try:
-                    request.state.user_payload = decode_token(token)
-                except AuthenticationError:
+                    request.state.user_payload = verify_token(token)
+                except UnauthorizedError:
                     request.state.user_payload = None
         return await call_next(request)
 
 
-def get_current_user(
+def verify_jwt_token(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> Dict[str, Any]:
+    """Verify the bearer token and return the authenticated user context."""
+    token: Optional[str] = extract_token(request, credentials)
+    if not token:
+        raise UnauthorizedError(
+            "Missing authentication token",
+            detail="Provide a bearer token in the Authorization header.",
+            code="missing_token",
+        )
+    payload: Dict[str, Any] = verify_token(token)
+    request.state.user_payload = payload
+    return _user_context(payload)
+
+
+def get_current_user(
+    current_user: Dict[str, Any] = Depends(verify_jwt_token),
+) -> Dict[str, Any]:
+    """Return the authenticated user context for a protected route."""
+    return current_user
+
+
+def load_current_user_record(
+    current_user: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db),
 ) -> User:
-    """Resolve the authenticated user from the bearer token.
-
-    Args:
-        request: The incoming request.
-        credentials: Credentials parsed from the ``Authorization`` header.
-        db: Database session dependency.
-
-    Returns:
-        User: The authenticated, active user.
-
-    Raises:
-        AuthenticationError: If the token is missing, invalid or refers to a
-            user that no longer exists or has been deactivated.
-    """
-    token: str | None = _extract_token(request, credentials)
-    if not token:
-        raise AuthenticationError("Missing authentication token", code="missing_token")
-
-    payload: Dict[str, Any] = decode_token(token)
-    subject: str | None = payload.get("sub")
-    if subject is None:
-        raise AuthenticationError("Invalid authentication token", code="invalid_token")
-
-    try:
-        user_id: int = int(subject)
-    except (TypeError, ValueError) as exc:
-        raise AuthenticationError("Invalid authentication token", code="invalid_token") from exc
-
-    user: User | None = db.get(User, user_id)
+    """Load the ORM row for the authenticated user."""
+    user: Optional[User] = db.get(User, int(current_user["id"]))
     if user is None:
-        raise AuthenticationError("User not found", code="user_not_found")
+        raise NotFoundError("User not found", code="user_not_found")
     if not user.is_active:
-        raise AuthenticationError("User account is inactive", code="inactive_user")
-
-    request.state.user_payload = payload
+        raise UnauthorizedError("User account is inactive", code="inactive_user")
     return user
 
 
-def require_role(*roles: UserRole) -> Callable[..., User]:
-    """Build a dependency that enforces the given roles.
+def require_role(*roles: str) -> Callable[..., Dict[str, Any]]:
+    """Build a dependency that enforces one of roles."""
 
-    Args:
-        *roles: Roles allowed to access the endpoint.
-
-    Returns:
-        Callable: A FastAPI dependency returning the authenticated user.
-
-    Raises:
-        PermissionDeniedError: If the user's role is not in ``roles``.
-    """
-
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
-        """Validate the role of the authenticated user.
-
-        Args:
-            current_user: The authenticated user.
-
-        Returns:
-            User: The authenticated user when authorized.
-        """
-        if roles and current_user.role not in roles:
-            raise PermissionDeniedError(
-                f"Role '{current_user.role.value}' is not allowed for this resource"
+    def dependency(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+        if roles and str(current_user.get("role", "")).lower() not in {r.lower() for r in roles}:
+            raise ForbiddenError(
+                "Insufficient permissions for this resource",
+                detail=f"This endpoint requires one of the roles: {', '.join(roles)}.",
+                code="insufficient_permissions",
             )
         return current_user
 
     return dependency
+
+
+def require_admin(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Allow only administrators."""
+    role: str = str(current_user.get("role", "")).lower()
+    if role != ROLE_ADMIN:
+        raise ForbiddenError(
+            "Administrator access required",
+            detail="This endpoint is restricted to administrators.",
+            code="admin_required",
+        )
+    return current_user
+
+
+def require_member(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Allow only library members."""
+    role: str = str(current_user.get("role", "")).lower()
+    if role != ROLE_MEMBER:
+        raise ForbiddenError(
+            "Member access required",
+            detail="This endpoint is restricted to library members.",
+            code="member_required",
+        )
+    return current_user

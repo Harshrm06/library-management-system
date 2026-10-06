@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     app_name: str = "Library Management System API"
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api"
-    debug: bool = True
+    debug: bool = False
 
-    database_url: str = "mysql+pymysql://root:password@localhost:3306/library_db"
+    database_url: str = "sqlite:///./library_db.db"
     mysql_user: str = "root"
     mysql_password: str = "password"
     mysql_host: str = "localhost"
@@ -53,7 +53,14 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     jwt_issuer: str = "library-management-system"
 
-    cors_origins: str = "http://localhost:3000"
+    # The Vite dev server is configured for port 5173 in frontend/vite.config.js,
+    # so 5173 is the origin that actually matters here; 3000 is kept only because
+    # older notes in .env.example referenced it. Both the localhost and 127.0.0.1
+    # spellings are listed because a browser treats them as distinct origins.
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:3000,http://127.0.0.1:3000"
+    )
 
     log_level: str = "INFO"
 

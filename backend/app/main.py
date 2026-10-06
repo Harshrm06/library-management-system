@@ -18,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.middleware.auth_middleware import AuthMiddleware
 from app.routes.auth_routes import router as auth_router
+from app.routes.book_routes import router as book_router
+from app.routes.borrowing_routes import router as borrowing_router
 from app.utils.exceptions import register_exception_handlers
 
 logging.basicConfig(
@@ -37,19 +39,31 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+# Middleware registration order is the reverse of how it reads.
+#
+# `add_middleware` *prepends*, so the LAST call is the OUTERMOST layer and is the
+# one that sees a request first. CORSMiddleware therefore has to be added LAST in
+# order to be outermost. When it is added first (as it used to be here) it ends up
+# nested inside AuthMiddleware, and because AuthMiddleware answered preflights
+# itself without calling the inner app, CORS headers were never attached: the
+# browser saw a 200 with no `Access-Control-Allow-Origin` and blocked the request.
+app.add_middleware(AuthMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
+    # Configurable rather than hardcoded, so the dev origin can be corrected
+    # without a code change. `*` is kept as the fallback default for local work.
+    allow_origins=settings.cors_origin_list or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.add_middleware(AuthMiddleware)
-
 register_exception_handlers(app)
 
-app.include_router(auth_router, prefix=settings.api_v1_prefix)
+app.include_router(auth_router)
+app.include_router(book_router)
+app.include_router(borrowing_router)
 
 
 @app.get("/health", tags=["System"], summary="Service health check")

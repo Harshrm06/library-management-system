@@ -1,11 +1,67 @@
 """Pydantic schemas package."""
 
+from app.models.borrowing_record import BorrowingStatus
+from app.schemas.book_schema import (
+    SORTABLE_FIELDS,
+    BookBaseSchema,
+    BookListResponse,
+    BookResponse,
+    BookSearchQuery,
+    CreateBookRequest,
+    UpdateBookRequest,
+    books_to_response,
+)
+from app.schemas.borrowing_record_schema import (
+    VALID_BORROWING_STATUSES,
+    BorrowRecordResponse,
+    BorrowRequest,
+    BorrowingHistoryQuery,
+    BorrowingHistoryResponse,
+    BorrowingRecordBaseSchema,
+    ReturnRequest,
+)
 from app.schemas.user_schema import (
-    TokenResponse,
-    UserCreate,
-    UserLogin,
-    UserOut,
-    UserUpdate,
+    ErrorResponse,
+    LoginData,
+    LoginSuccessResponse,
+    LogoutResponse,
+    RegisterData,
+    RegisterSuccessResponse,
+    TokenRefreshResponse,
+    UserBaseSchema,
+    UserLoginRequest,
+    UserRegisterRequest,
+    UserResponse,
+    UserUpdateRequest,
 )
 
-__all__ = ["TokenResponse", "UserCreate", "UserLogin", "UserOut", "UserUpdate"]
+__all__ = [
+    "SORTABLE_FIELDS",
+    "VALID_BORROWING_STATUSES",
+    "BookBaseSchema",
+    "BookListResponse",
+    "BookResponse",
+    "BookSearchQuery",
+    "BorrowRecordResponse",
+    "BorrowRequest",
+    "BorrowingHistoryQuery",
+    "BorrowingHistoryResponse",
+    "BorrowingRecordBaseSchema",
+    "BorrowingStatus",
+    "CreateBookRequest",
+    "ErrorResponse",
+    "LoginData",
+    "LoginSuccessResponse",
+    "LogoutResponse",
+    "RegisterData",
+    "RegisterSuccessResponse",
+    "ReturnRequest",
+    "TokenRefreshResponse",
+    "UpdateBookRequest",
+    "UserBaseSchema",
+    "UserLoginRequest",
+    "UserRegisterRequest",
+    "UserResponse",
+    "UserUpdateRequest",
+    "books_to_response",
+]

@@ -3,39 +3,104 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING, List
 
-from sqlalchemy import DateTime, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base
+from app.database import Base, utcnow
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard
+    from app.models.borrowing_record import BorrowingRecord
 
 
 class Book(Base):
-    """A book in the library catalog with inventory tracking."""
+    """A catalog entry with copy-level inventory tracking.
+
+    Attributes:
+        id: Surrogate primary key.
+        title: Book title.
+        author: Book author.
+        isbn: Unique 10 or 13 digit identifier used for lookups.
+        genre: Optional genre used for catalog filtering.
+        description: Optional long form summary. Stored as unbounded ``TEXT``, so the
+            column never truncates a synopsis; the limit on how much a client may
+            send lives in the request schema, not here.
+        total_quantity: Number of copies owned by the library.
+        available_quantity: Copies not currently on loan.
+        published_year: Optional year of first publication.
+        borrowings: Every loan of this title, across all copies.
+        created_at: UTC timestamp set when the row is first inserted.
+        updated_at: UTC timestamp refreshed on every update.
+    """
 
     __tablename__ = "books"
+    __table_args__ = (
+        # `isbn` also carries a column level UNIQUE constraint, which MySQL backs
+        # with its own index; this one keeps lookups explicit in the metadata.
+        Index("ix_books_isbn", "isbn"),
+        Index("ix_books_title", "title"),
+        Index("ix_books_author", "author"),
+        Index("ix_books_genre", "genre"),
+        # Inventory can never be negative, and the library cannot lend more
+        # copies than it owns. Both rules are enforced by the database as well
+        # as by `app.schemas.book_schema`.
+        CheckConstraint("total_quantity >= 0", name="ck_books_total_quantity_non_negative"),
+        CheckConstraint(
+            "available_quantity >= 0", name="ck_books_available_quantity_non_negative"
+        ),
+        CheckConstraint(
+            "available_quantity <= total_quantity",
+            name="ck_books_available_within_total",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
-    author: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
-    isbn: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
-    genre: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    author: Mapped[str] = mapped_column(String(255), nullable=False)
+    isbn: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    genre: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     total_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     available_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     published_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
+    borrowings: Mapped[List["BorrowingRecord"]] = relationship(
+        "BorrowingRecord", back_populates="book"
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime,
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
-    @property
     def is_available(self) -> bool:
-        """Return ``True`` when at least one copy can be borrowed."""
+        """Return ``True`` when at least one copy can be borrowed.
+
+        Returns:
+            bool: ``True`` if ``available_quantity`` is positive.
+
+        Example:
+            A row is built in memory, so the example needs the full model package
+            imported before ``Book.borrowings`` can resolve ``BorrowingRecord``::
+
+            >>> book = Book(  # doctest: +SKIP
+            ...     title="Dune",
+            ...     author="Frank Herbert",
+            ...     isbn="1",
+            ...     total_quantity=1,
+            ...     available_quantity=1,
+            ... )
+            >>> book.is_available()  # doctest: +SKIP
+            True
+        """
         return self.available_quantity > 0
 
     def __repr__(self) -> str:
-        """Return a debugging representation of the book."""
+        """Return a concise debugging representation of the book.
+
+        Returns:
+            str: A string with the primary key, title and available copies.
+        """
         return f"<Book id={self.id} title={self.title!r} available={self.available_quantity}>"
