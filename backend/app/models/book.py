@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.borrowing_record import BorrowingRecord
 
 
 class Book(Base):
@@ -29,6 +33,10 @@ class Book(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    borrowing_records: Mapped[list[BorrowingRecord]] = relationship(
+        "BorrowingRecord", back_populates="book", cascade="all, delete-orphan"
     )
 
     @property

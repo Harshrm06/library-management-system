@@ -17,7 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.middleware.auth_middleware import AuthMiddleware
+from app.routes.admin_routes import router as admin_router
 from app.routes.auth_routes import router as auth_router
+from app.routes.borrow_routes import router as borrow_router
+from app.routes.return_routes import router as return_router
 from app.utils.exceptions import register_exception_handlers
 
 logging.basicConfig(
@@ -49,7 +52,10 @@ app.add_middleware(AuthMiddleware)
 
 register_exception_handlers(app)
 
+app.include_router(admin_router, prefix=settings.api_v1_prefix)
 app.include_router(auth_router, prefix=settings.api_v1_prefix)
+app.include_router(borrow_router, prefix=settings.api_v1_prefix)
+app.include_router(return_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health", tags=["System"], summary="Service health check")

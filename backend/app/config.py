@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api"
     debug: bool = True
+    default_borrow_days: int = 14
 
     database_url: str = "mysql+pymysql://root:password@localhost:3306/library_db"
     mysql_user: str = "root"
@@ -46,7 +47,7 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 3600
 
     jwt_secret: str = Field(
-        default="change_me_in_production",
+        default="change_me_in_production_secret_key_32_bytes_minimum",
         min_length=8,
     )
     jwt_expiry_hours: int = 24
@@ -54,6 +55,8 @@ class Settings(BaseSettings):
     jwt_issuer: str = "library-management-system"
 
     cors_origins: str = "http://localhost:3000"
+
+    daily_fine_rate: float = 1.00
 
     log_level: str = "INFO"
 
@@ -66,6 +69,12 @@ class Settings(BaseSettings):
     def jwt_expiry_seconds(self) -> int:
         """Return the token lifetime in seconds."""
         return self.jwt_expiry_hours * 3600
+
+    @property
+    def daily_fine_rate_decimal(self) -> Decimal:
+        """Return the daily fine rate as a Decimal for monetary calculations."""
+        from decimal import Decimal
+        return Decimal(str(self.daily_fine_rate))
 
 
 @lru_cache(maxsize=1)
