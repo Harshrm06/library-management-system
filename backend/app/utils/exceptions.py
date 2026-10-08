@@ -70,6 +70,7 @@ class AppException(Exception):
         return {
             "success": False,
             "message": self.message,
+            "detail": self.detail,
             "error": self.detail,
             "code": self.code,
             "timestamp": _utcnow(),

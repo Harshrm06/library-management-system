@@ -68,6 +68,12 @@ class User(Base):
     borrowings: Mapped[List["BorrowingRecord"]] = relationship(
         "BorrowingRecord", back_populates="user"
     )
+
+    @property
+    def borrowing_records(self) -> List["BorrowingRecord"]:
+        """Alias returning borrowings relationship."""
+        return self.borrowings
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

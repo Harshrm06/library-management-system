@@ -20,33 +20,34 @@ DEFAULT_EXPIRY = timedelta(hours=24)
 
 
 def create_access_token(
-    data: Mapping[str, Any],
+    data: Mapping[str, Any] | int | str,
     expires_delta: Optional[timedelta] = None,
     **extra_claims: Any,
 ) -> str:
     """Create a signed HS256 access token.
 
     Args:
-        data: Claims to embed. ``user_id`` is also copied into ``sub`` so the
-            token can be resolved back to a user. ``email`` and ``role`` are
-            optional.
-        expires_delta: Token lifetime; defaults to
-            ``JWT_EXPIRY_HOURS`` (24 hours) from the settings.
-        **extra_claims: Additional claims merged into the payload.
+        data: User ID integer/string OR claims mapping containing ``user_id``.
+        expires_delta: Token lifetime; defaults to 24 hours.
+        **extra_claims: Additional claims merged into payload.
 
     Returns:
         str: The encoded JWT.
-
-    Raises:
-        UnauthorizedError: If ``user_id`` is missing from ``data``.
-
-    Example:
-        >>> token = create_access_token({"user_id": 1, "email": "a@b.c", "role": "member"})
     """
-    if not data or data.get("user_id") is None:
+    if isinstance(data, (int, str)):
+        payload_data: Dict[str, Any] = {"user_id": int(data)}
+        if "role" in extra_claims:
+            payload_data["role"] = extra_claims.pop("role")
+    elif isinstance(data, Mapping):
+        payload_data = dict(data)
+    else:
+        payload_data = {}
+
+    user_id = payload_data.get("user_id")
+    if user_id is None:
         raise UnauthorizedError(
             "Token payload requires a user_id",
-            detail="create_access_token expects a mapping containing 'user_id'.",
+            detail="create_access_token expects a user_id or mapping containing 'user_id'.",
             code="invalid_token_payload",
         )
 
@@ -55,17 +56,17 @@ def create_access_token(
     expires_at: datetime = now + lifetime
 
     payload: Dict[str, Any] = {
-        "sub": str(data["user_id"]),
-        "user_id": data["user_id"],
+        "sub": str(user_id),
+        "user_id": int(user_id) if str(user_id).isdigit() else user_id,
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
         "iss": settings.jwt_issuer,
         "jti": uuid.uuid4().hex,
     }
     for claim in ("email", "role"):
-        value: Any = data.get(claim)
+        value: Any = payload_data.get(claim)
         if value is not None:
-            payload[claim] = value.value if hasattr(value, "value") else value
+            payload[claim] = value.value if hasattr(value, "value") else str(value)
     payload.update(extra_claims)
 
     token: str = jwt.encode(payload, settings.jwt_secret, algorithm=settings.algorithm)

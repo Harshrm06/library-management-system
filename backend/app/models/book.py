@@ -67,6 +67,12 @@ class Book(Base):
     borrowings: Mapped[List["BorrowingRecord"]] = relationship(
         "BorrowingRecord", back_populates="book"
     )
+
+    @property
+    def borrowing_records(self) -> List["BorrowingRecord"]:
+        """Alias returning borrowings relationship."""
+        return self.borrowings
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -75,25 +81,12 @@ class Book(Base):
         nullable=False,
     )
 
+    @property
     def is_available(self) -> bool:
         """Return ``True`` when at least one copy can be borrowed.
 
         Returns:
             bool: ``True`` if ``available_quantity`` is positive.
-
-        Example:
-            A row is built in memory, so the example needs the full model package
-            imported before ``Book.borrowings`` can resolve ``BorrowingRecord``::
-
-            >>> book = Book(  # doctest: +SKIP
-            ...     title="Dune",
-            ...     author="Frank Herbert",
-            ...     isbn="1",
-            ...     total_quantity=1,
-            ...     available_quantity=1,
-            ... )
-            >>> book.is_available()  # doctest: +SKIP
-            True
         """
         return self.available_quantity > 0
 

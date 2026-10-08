@@ -396,34 +396,38 @@ class BookResponse(BaseModel):
 
 
 class BookListResponse(BaseModel):
-    """One page of catalog results.
+    """One page of catalog results supporting dual schema conventions."""
 
-    Example:
-        >>> BookListResponse(books=[], total=0, page=1, limit=10, has_next=False).total
-        0
-    """
+    model_config = ConfigDict(from_attributes=True)
 
-    books: List[BookResponse] = Field(
-        default_factory=list, description="Books on this page"
-    )
-    total: int = Field(ge=0, description="Total books matching the query", examples=[42])
-    page: int = Field(ge=1, description="1-based page number", examples=[1])
-    limit: int = Field(ge=1, le=100, description="Page size", examples=[10])
-    has_next: bool = Field(description="True when another page follows")
+    items: List[BookResponse] = Field(default_factory=list, description="Books on this page")
+    books: List[BookResponse] = Field(default_factory=list, description="Books on this page (alias)")
+    total: int = Field(ge=0, default=0, description="Total books matching query")
+    page: int = Field(ge=1, default=1, description="1-based page number")
+    page_size: int = Field(ge=1, le=100, default=10, description="Page size")
+    limit: int = Field(ge=1, le=100, default=10, description="Page size (alias)")
+    has_next: bool = Field(default=False, description="True when another page follows")
 
-    @model_validator(mode="after")
-    def _validate_pagination(self) -> "BookListResponse":
-        """Keep ``page`` consistent with the 1-based convention.
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_pagination(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "items" in data and "books" not in data:
+                data["books"] = data["items"]
+            elif "books" in data and "items" not in data:
+                data["items"] = data["books"]
 
-        Returns:
-            BookListResponse: The validated response.
+            if "page_size" in data and "limit" not in data:
+                data["limit"] = data["page_size"]
+            elif "limit" in data and "page_size" not in data:
+                data["page_size"] = data["limit"]
 
-        Raises:
-            ValueError: If ``page`` is below 1.
-        """
-        if self.page < 1:
-            raise ValueError("page must be 1 or greater")
-        return self
+            if "has_next" not in data:
+                page = data.get("page", 1)
+                size = data.get("page_size", data.get("limit", 10))
+                total = data.get("total", 0)
+                data["has_next"] = (page * size) < total
+        return data
 
 
 class BookSearchQuery(BaseModel):
@@ -594,14 +598,21 @@ def books_to_response(rows: List[Any]) -> List[BookResponse]:
     return [BookResponse.model_validate(row) for row in rows]
 
 
+BookCreate = CreateBookRequest
+BookUpdate = UpdateBookRequest
+BookOut = BookResponse
+
 __all__: List[str] = [
     "SORTABLE_FIELDS",
     "BookAvailabilityResponse",
     "BookBaseSchema",
+    "BookCreate",
     "BookDeleteResponse",
     "BookListResponse",
+    "BookOut",
     "BookResponse",
     "BookSearchQuery",
+    "BookUpdate",
     "CreateBookRequest",
     "UpdateBookRequest",
     "books_to_response",

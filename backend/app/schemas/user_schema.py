@@ -445,3 +445,41 @@ class UserUpdateRequest(BaseModel):
     address: Optional[str] = Field(
         default=None, max_length=255, description="New postal address"
     )
+
+
+from app.models.user import UserRole
+
+
+class UserRoleUpdate(BaseModel):
+    """Payload used by an admin to update a user's role."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: UserRole
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def parse_role(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v_clean = v.strip().lower()
+            if v_clean in ("admin", "member"):
+                return UserRole(v_clean)
+        return v
+
+
+class UserListResponse(BaseModel):
+    """Paginated user listing response for admin endpoints."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[UserResponse]
+    page: int = Field(default=1, ge=1, description="Current page number")
+    page_size: int = Field(default=10, ge=1, le=100, description="Items per page")
+    total: int = Field(description="Total count of matching user records")
+
+
+UserOut = UserResponse
+UserCreate = UserRegisterRequest
+UserUpdate = UserUpdateRequest
+UserLogin = UserLoginRequest
+TokenResponse = LoginSuccessResponse

@@ -64,6 +64,15 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    default_borrow_days: int = 14
+    daily_fine_rate: float = 1.00
+
+    @property
+    def daily_fine_rate_decimal(self) -> Decimal:
+        """Return the daily fine rate as a Decimal."""
+        from decimal import Decimal
+        return Decimal(str(self.daily_fine_rate))
+
     @property
     def cors_origin_list(self) -> List[str]:
         """Return the CORS origins as a list."""

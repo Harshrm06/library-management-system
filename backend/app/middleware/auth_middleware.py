@@ -12,9 +12,8 @@ from starlette.types import ASGIApp
 
 from app.database import get_db
 from app.models.user import User, UserRole
-from app.utils.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
+from app.utils.exceptions import NotFoundError, PermissionDeniedError, UnauthorizedError
 from app.utils.jwt_utils import verify_token
-
 
 bearer_scheme = HTTPBearer(auto_error=False, description="JWT access token")
 
@@ -70,15 +69,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        """Decode the bearer token and pass preflight requests through untouched.
-
-        A CORS preflight carries no credentials by design, so there is nothing to
-        authenticate here. The request is forwarded with ``call_next`` rather than
-        answered with a bare ``Response``: returning early would skip every
-        middleware nested inside this one, including ``CORSMiddleware``, and the
-        browser would receive a 200 with no ``Access-Control-Allow-Origin``
-        header and block the real request that followed.
-        """
+        """Decode the bearer token and pass preflight requests through untouched."""
         if request.method == "OPTIONS":
             return await call_next(request)
 
@@ -97,7 +88,7 @@ def verify_jwt_token(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> Dict[str, Any]:
-    """Verify the bearer token and return the authenticated user context."""
+    """Verify the bearer token and return the authenticated user payload dict."""
     token: Optional[str] = extract_token(request, credentials)
     if not token:
         raise UnauthorizedError(
@@ -111,18 +102,12 @@ def verify_jwt_token(
 
 
 def get_current_user(
-    current_user: Dict[str, Any] = Depends(verify_jwt_token),
-) -> Dict[str, Any]:
-    """Return the authenticated user context for a protected route."""
-    return current_user
-
-
-def load_current_user_record(
-    current_user: Dict[str, Any] = Depends(verify_jwt_token),
+    current_user_data: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db),
 ) -> User:
-    """Load the ORM row for the authenticated user."""
-    user: Optional[User] = db.get(User, int(current_user["id"]))
+    """Return the authenticated User ORM record for protected routes."""
+    user_id = current_user_data.get("id") or current_user_data.get("user_id")
+    user: Optional[User] = db.get(User, int(user_id)) if user_id is not None else None
     if user is None:
         raise NotFoundError("User not found", code="user_not_found")
     if not user.is_active:
@@ -130,44 +115,53 @@ def load_current_user_record(
     return user
 
 
-def require_role(*roles: str) -> Callable[..., Dict[str, Any]]:
-    """Build a dependency that enforces one of roles."""
+def load_current_user_record(
+    current_user_data: Dict[str, Any] = Depends(verify_jwt_token),
+    db: Session = Depends(get_db),
+) -> User:
+    """Load the ORM row for the authenticated user."""
+    return get_current_user(current_user_data, db)
 
-    def dependency(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-        if roles and str(current_user.get("role", "")).lower() not in {r.lower() for r in roles}:
-            raise ForbiddenError(
+
+def require_role(*roles: Any) -> Callable[..., User]:
+    """Build a dependency that enforces one of roles and returns the User ORM object."""
+    allowed_roles = {r.value if hasattr(r, "value") else str(r).lower() for r in roles}
+
+    def dependency(
+        user: User = Depends(get_current_user),
+    ) -> User:
+        user_role_str = user.role.value.lower() if hasattr(user.role, "value") else str(user.role).lower()
+        if allowed_roles and user_role_str not in allowed_roles:
+            raise PermissionDeniedError(
                 "Insufficient permissions for this resource",
-                detail=f"This endpoint requires one of the roles: {', '.join(roles)}.",
-                code="insufficient_permissions",
+                code="permission_denied",
             )
-        return current_user
+        return user
 
     return dependency
 
 
 def require_admin(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
+    user: User = Depends(get_current_user),
+) -> User:
     """Allow only administrators."""
-    role: str = str(current_user.get("role", "")).lower()
-    if role != ROLE_ADMIN:
-        raise ForbiddenError(
+    user_role_str = user.role.value.lower() if hasattr(user.role, "value") else str(user.role).lower()
+    if user_role_str != ROLE_ADMIN.lower():
+        raise PermissionDeniedError(
             "Administrator access required",
-            detail="This endpoint is restricted to administrators.",
-            code="admin_required",
+            code="permission_denied",
         )
-    return current_user
+    return user
 
 
 def require_member(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
+    user: User = Depends(get_current_user),
+) -> User:
     """Allow only library members."""
-    role: str = str(current_user.get("role", "")).lower()
-    if role != ROLE_MEMBER:
-        raise ForbiddenError(
+    user_role_str = user.role.value.lower() if hasattr(user.role, "value") else str(user.role).lower()
+    if user_role_str != ROLE_MEMBER.lower():
+        raise PermissionDeniedError(
             "Member access required",
-            detail="This endpoint is restricted to library members.",
-            code="member_required",
+            code="permission_denied",
         )
-    return current_user
+    return user
