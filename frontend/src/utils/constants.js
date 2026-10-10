@@ -23,6 +23,16 @@ export const BOOK_ENDPOINTS = {
   availability: (bookId) => `${API_PREFIX}/books/${bookId}/availability`,
 };
 
+export const ADMIN_ENDPOINTS = {
+  DASHBOARD_STATS: `${API_PREFIX}/admin/dashboard/stats`,
+  USERS_LIST: `${API_PREFIX}/admin/users`,
+  USERS_DETAIL: (id) => `${API_PREFIX}/admin/users/${id}`,
+  USERS_ROLE: (id) => `${API_PREFIX}/admin/users/${id}/role`,
+  BOOKS_LIST: `${API_PREFIX}/admin/books`,
+  BOOKS_DETAIL: (id) => `${API_PREFIX}/admin/books/${id}`,
+  BORROWINGS_HISTORY: `${API_PREFIX}/admin/borrowings`,
+};
+
 export const BORROW_ENDPOINTS = {
   borrow: `${API_PREFIX}/borrow`,
   returnBook: `${API_PREFIX}/return`,
@@ -49,6 +59,9 @@ export const ROUTES = {
   borrowingHistory: '/borrowing-history',
   profile: '/profile',
   adminDashboard: '/admin',
+  adminUsers: '/admin/users',
+  adminBooks: '/admin/books',
+  adminBorrowingHistory: '/admin/borrowing-history',
   unauthorized: '/unauthorized',
   home: '/',
 };

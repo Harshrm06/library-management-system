@@ -1,53 +1,105 @@
-/**
- * Admin dashboard.
- *
- * Statistics come from `GET /api/admin/dashboard` in a later phase, so this page
- * is a placeholder - but it is a *real* admin-only route: reaching it as a
- * member renders the 403 screen through `ProtectedRoute`, which is what the role
- * check is for.
- */
-
-import { Link } from 'react-router-dom';
-
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { adminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../utils/constants';
 
-/**
- * Render the admin dashboard placeholder.
- *
- * @returns {JSX.Element} The page.
- */
 export default function AdminDashboardPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (user?.role !== 'admin') {
+      navigate(ROUTES.unauthorized);
+      return;
+    }
+
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        const data = await adminService.getDashboardStats();
+        setStats(data);
+        setError(null);
+      } catch (err) {
+        setError(err.message || 'Failed to load dashboard stats');
+        setStats(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, [user, navigate]);
+
+  if (loading) return <LoadingSpinner />;
 
   return (
-    <main className="page-container">
-      <header className="mb-6">
-        <h1 className="text-2xl">Admin dashboard</h1>
-        <p className="mt-1 text-sm text-ink-600">
-          Library statistics, inventory and user management for {user?.email ?? 'administrators'}.
-        </p>
-      </header>
+    <div>
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {['Total books', 'Registered members', 'Books on loan', 'Overdue loans'].map((label) => (
-          <div key={label} className="card">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
-            <p className="mt-1 text-3xl font-semibold text-ink-400">—</p>
-            <p className="mt-1 text-xs text-ink-500">awaiting the admin API</p>
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
           </div>
-        ))}
-      </div>
+        )}
 
-      <div className="card mt-6">
-        <h2 className="text-lg">Coming soon</h2>
-        <p className="mt-2 text-sm text-ink-600">
-          These cards fill in automatically once <code>GET /api/admin/dashboard</code> is available.
-        </p>
-        <Link to={ROUTES.catalog} className="btn-secondary mt-4">
-          Back to the catalog
-        </Link>
+        {stats && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {/* Total Books */}
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-gray-600 text-sm font-semibold mb-2">Total Books</h3>
+                <p className="text-4xl font-bold text-blue-600">{stats.total_books || 0}</p>
+              </div>
+
+              {/* Total Members */}
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-gray-600 text-sm font-semibold mb-2">Total Members</h3>
+                <p className="text-4xl font-bold text-green-600">{stats.total_members || 0}</p>
+              </div>
+
+              {/* Borrowed Books */}
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-gray-600 text-sm font-semibold mb-2">Currently Borrowed</h3>
+                <p className="text-4xl font-bold text-orange-600">{stats.borrowed_books || 0}</p>
+              </div>
+
+              {/* Overdue Books */}
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-gray-600 text-sm font-semibold mb-2">Overdue Books</h3>
+                <p className="text-4xl font-bold text-red-600">{stats.overdue_books || 0}</p>
+              </div>
+            </div>
+
+            {/* Navigation Links */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button
+                onClick={() => navigate(ROUTES.adminUsers)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold"
+              >
+                Manage Users
+              </button>
+              <button
+                onClick={() => navigate(ROUTES.adminBooks)}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
+              >
+                Manage Books
+              </button>
+              <button
+                onClick={() => navigate(ROUTES.adminBorrowingHistory)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
+              >
+                Borrowing History
+              </button>
+            </div>
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 }

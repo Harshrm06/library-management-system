@@ -1,246 +1,239 @@
-/**
- * Profile page: view the current account and edit its editable fields.
- *
- * Reads through `getCurrentUser()` so the screen always reflects the server, and
- * saves through `updateProfile()`, which sends only the fields that changed. Role
- * and email are shown but not editable - the API does not accept them.
- *
- * @example
- * // Arriving from "Edit profile" focuses the form.
- * <ProfilePage />   // location.state = { edit: true }
- */
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import LoadingSpinner from "../components/LoadingSpinner";
+import authService from "../services/authService";
+import { useAuth } from "../hooks/useAuth";
+import { ROUTES } from "../utils/constants";
 
-import { useCallback, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { CircularProgress } from '@mui/material';
-
-import FormError from '../components/FormError';
-import FormInput from '../components/FormInput';
-import LoadingSpinner from '../components/LoadingSpinner';
-import Toast from '../components/Toast';
-import { useAuth } from '../hooks/useAuth';
-import { getCurrentUser, updateProfile } from '../services/authService';
-import { formatDate } from '../utils/helpers';
-
-/** Fields the user may change. */
-const EDITABLE_FIELDS = ['first_name', 'last_name', 'phone', 'address'];
-
-/**
- * Turn a profile into the editable form state.
- *
- * @param {object} profile The user from the API.
- * @returns {{ first_name: string, last_name: string, phone: string, address: string }} Form values.
- */
-function toFormValues(profile) {
-  return {
-    first_name: profile?.first_name ?? '',
-    last_name: profile?.last_name ?? '',
-    phone: profile?.phone ?? '',
-    address: profile?.address ?? '',
-  };
-}
-
-/**
- * Render the profile screen.
- *
- * @returns {JSX.Element} The page.
- */
 export default function ProfilePage() {
-  // Aliased to avoid colliding with the local `setError` below, which renders the
-  // message on this page; the context one raises the shared header toast.
-  const { setError: setAuthError } = useAuth();
-  const location = useLocation();
-  const startedEditing = Boolean(location.state?.edit);
-
-  const [profile, setProfile] = useState(null);
-  const [values, setValues] = useState(null);
-  const [editing, setEditing] = useState(startedEditing);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await getCurrentUser();
-    setLoading(false);
-    if (!result.success) {
-      setError(result.message);
-      setAuthError(result.message);
-      return;
-    }
-    setProfile(result.data.user);
-    setValues(toFormValues(result.data.user));
-  }, [setAuthError]);
+  const navigate = useNavigate();
+  const { user, setUser } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    address: "",
+  });
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  /**
-   * Update one editable field.
-   *
-   * @param {React.ChangeEvent<HTMLInputElement>} event The change event.
-   */
-  function handleChange(event) {
-    const { name, value } = event.target;
-    setValues((current) => ({ ...current, [name]: value }));
-  }
-
-  /**
-   * Send the changed fields to the API.
-   *
-   * @param {React.FormEvent<HTMLFormElement>} event The submit event.
-   * @returns {Promise<void>} Resolves once the save settles.
-   */
-  async function handleSubmit(event) {
-    event.preventDefault();
-    if (!profile) return;
-
-    const changes = {};
-    for (const field of EDITABLE_FIELDS) {
-      if (values[field] !== (profile[field] ?? '')) changes[field] = values[field];
+    if (!user) {
+      navigate(ROUTES.login);
+      return;
     }
-    if (Object.keys(changes).length === 0) {
+
+    setFormData({
+      name: user.first_name || user.name || "",
+      phone: user.phone || "",
+      address: user.address || "",
+    });
+  }, [user, navigate]);
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+
+    if (!formData.name || !formData.phone || !formData.address) {
+      setError("All fields are required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const updateData = {
+        first_name: formData.name,
+        phone: formData.phone,
+        address: formData.address,
+      };
+      const response = await authService.updateProfile(updateData);
+
+      // Update auth context with new user data
+      if (response.success && response.data && response.data.user && setUser) {
+        setUser(response.data.user);
+      } else if (response.data && setUser) {
+        setUser(response.data);
+      }
+
+      setTimeout(() => window.location.reload(), 500);
+
+      setSuccess("Profile updated successfully");
       setEditing(false);
-      return;
+      setError(null);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err.message || "Failed to update profile");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setSaving(true);
-    setError('');
-    const result = await updateProfile(changes);
-    setSaving(false);
-    if (!result.success) {
-      setError(result.message);
-      setAuthError(result.message);
-      return;
-    }
-    setProfile(result.data.user);
-    setValues(toFormValues(result.data.user));
-    setEditing(false);
-  }
-
-  if (loading || !values) {
-    return <LoadingSpinner label="Loading your profile…" />;
-  }
+  if (!user) return <LoadingSpinner />;
 
   return (
-    <main className="page-container">
-      <header className="mb-6">
-        <h1 className="text-2xl">My profile</h1>
-        <p className="mt-1 text-sm text-ink-600">
-          Your name and contact details, as the library has them on record.
-        </p>
-      </header>
+    <>
+      <div className="container mx-auto px-4 py-8 max-w-md">
+        <h1 className="text-3xl font-bold mb-8">My Profile</h1>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <section className="card lg:col-span-1">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-ink-500">Account</h2>
-          <dl className="mt-3 space-y-3 text-sm">
-            <div>
-              <dt className="text-ink-500">Email</dt>
-              <dd className="font-medium text-ink-900">{profile?.email}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-500">Role</dt>
-              <dd className="font-medium capitalize text-ink-900">{profile?.role}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-500">Member since</dt>
-              <dd className="font-medium text-ink-900">{formatDate(profile?.created_at)}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-500">Status</dt>
-              <dd className="font-medium text-ink-900">
-                {profile?.is_active ? 'Active' : 'Inactive'}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="card lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg">Personal details</h2>
-            {editing ? null : (
-              <button type="button" className="btn-secondary" onClick={() => setEditing(true)}>
-                Edit
-              </button>
-            )}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
           </div>
+        )}
 
-          <Toast severity="error" message={error} className="mb-4" />
+        {success && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+            {success}
+          </div>
+        )}
 
-          <form className="space-y-4" onSubmit={handleSubmit} noValidate>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormInput
-                label="First name"
-                name="first_name"
-                value={values.first_name}
-                onChange={handleChange}
-                ariaLabel="First name"
-                autoComplete="given-name"
-                disabled={!editing || saving}
-              />
-              <FormInput
-                label="Last name"
-                name="last_name"
-                value={values.last_name}
-                onChange={handleChange}
-                ariaLabel="Last name"
-                autoComplete="family-name"
-                disabled={!editing || saving}
-              />
+        {!editing ? (
+          // View Mode
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="mb-6">
+              <label className="text-sm text-gray-600 font-semibold">
+                Email
+              </label>
+              <p className="text-lg">{user.email}</p>
             </div>
 
-            <FormInput
-              label="Phone"
-              name="phone"
-              type="tel"
-              value={values.phone}
-              onChange={handleChange}
-              ariaLabel="Phone number"
-              autoComplete="tel"
-              disabled={!editing || saving}
-            />
-            <FormInput
-              label="Address"
-              name="address"
-              value={values.address}
-              onChange={handleChange}
-              ariaLabel="Postal address"
-              autoComplete="street-address"
-              disabled={!editing || saving}
-            />
+            <div className="mb-6">
+              <label className="text-sm text-gray-600 font-semibold">
+                Role
+              </label>
+              <p className="text-lg capitalize">{user.role}</p>
+            </div>
 
-            {editing ? (
-              <div className="flex flex-wrap gap-3">
-                <button type="submit" className="btn-primary" disabled={saving}>
-                  {saving ? (
-                    <span className="flex items-center gap-2">
-                      <CircularProgress size={16} color="inherit" aria-hidden="true" />
-                      Saving…
-                    </span>
-                  ) : (
-                    'Save changes'
-                  )}
-                </button>
+            <div className="mb-6">
+              <label className="text-sm text-gray-600 font-semibold">
+                Name
+              </label>
+              <p className="text-lg">{user.first_name || user.name || "N/A"}</p>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-sm text-gray-600 font-semibold">
+                Phone
+              </label>
+              <p className="text-lg">{user.phone || "N/A"}</p>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-sm text-gray-600 font-semibold">
+                Address
+              </label>
+              <p className="text-lg">{user.address || "N/A"}</p>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-sm text-gray-600 font-semibold">
+                Member Since
+              </label>
+              <p className="text-lg">
+                {new Date(user.created_at).toLocaleDateString()}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setEditing(true)}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold"
+            >
+              Edit Profile
+            </button>
+          </div>
+        ) : (
+          // Edit Mode
+          <div className="bg-white rounded-lg shadow p-6">
+            <form onSubmit={handleSaveProfile}>
+              <div className="mb-6">
+                <label className="block text-sm font-semibold mb-2">
+                  Email (Read-Only)
+                </label>
+                <input
+                  type="email"
+                  value={user.email}
+                  disabled
+                  className="w-full px-4 py-2 border rounded bg-gray-100 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-semibold mb-2">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleFormChange}
+                  required
+                  className="w-full px-4 py-2 border rounded"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-semibold mb-2">
+                  Phone *
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleFormChange}
+                  required
+                  className="w-full px-4 py-2 border rounded"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-semibold mb-2">
+                  Address *
+                </label>
+                <textarea
+                  name="address"
+                  value={formData.address}
+                  onChange={handleFormChange}
+                  required
+                  rows="3"
+                  className="w-full px-4 py-2 border rounded"
+                />
+              </div>
+
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  className="btn-secondary"
                   onClick={() => {
-                    setValues(toFormValues(profile));
                     setEditing(false);
+                    setFormData({
+                      name: user.first_name || user.name || "",
+                      phone: user.phone || "",
+                      address: user.address || "",
+                    });
                   }}
-                  disabled={saving}
+                  className="flex-1 px-4 py-2 border rounded hover:bg-gray-100"
                 >
                   Cancel
                 </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded font-semibold"
+                >
+                  {loading ? "Saving..." : "Save Changes"}
+                </button>
               </div>
-            ) : (
-              <FormError message="" />
-            )}
-          </form>
-        </section>
+            </form>
+          </div>
+        )}
       </div>
-    </main>
+    </>
   );
 }

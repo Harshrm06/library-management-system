@@ -128,15 +128,15 @@ export function validatePasswordConfirmation(password, confirmation) {
 /**
  * Validate the registration form as a whole.
  *
- * @param {{ firstName: string, lastName: string, email: string, password: string, confirmPassword?: string }} values
- *   Form values keyed by camelCase names. `confirmPassword` is checked only when
+ * @param {{ first_name: string, last_name: string, email: string, password: string, confirmPassword?: string }} values
+ *   Form values keyed by snake_case names. `confirmPassword` is checked only when
  *   the form provides it, so callers without the field keep working.
  * @returns {Record<string, string>} Field name to error message; empty when valid.
  */
 export function validateRegistration(values) {
   const errors = {};
-  if (!isRequired(values.firstName)) errors.firstName = 'First name is required';
-  if (!isRequired(values.lastName)) errors.lastName = 'Last name is required';
+  if (!isRequired(values.first_name)) errors.first_name = 'First name is required';
+  if (!isRequired(values.last_name)) errors.last_name = 'Last name is required';
   if (!isValidEmail(values.email)) errors.email = 'Enter a valid email address';
   const password = validatePassword(values.password);
   if (!password.valid) errors.password = password.message;

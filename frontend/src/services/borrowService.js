@@ -219,3 +219,5 @@ export default {
   getMemberHistory,
   hasActiveLoan,
 };
+
+

@@ -53,7 +53,7 @@ async def handle_options():
 # Rest of your routes continue below...
 
 router = APIRouter(
-    prefix=f"{settings.api_v1_prefix}/auth",
+    prefix="/auth",
     tags=["auth"],
 )
 
@@ -274,7 +274,7 @@ async def login(
     responses=error_responses(401, 404, 422),
 )
 async def read_current_user(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserResponse:
     """Return the profile behind the supplied bearer token.
@@ -290,7 +290,7 @@ async def read_current_user(
         UnauthorizedError: If the token is missing, expired or invalid (401).
         NotFoundError: If the account no longer exists (404).
     """
-    return await auth_controller.get_user_profile(int(current_user["id"]), db)
+    return await auth_controller.get_user_profile(current_user.id, db)
 
 
 @router.put(
@@ -307,7 +307,7 @@ async def read_current_user(
 )
 async def update_current_user(
     payload: UserUpdateRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserResponse:
     """Apply a partial update to the authenticated profile.
@@ -325,7 +325,7 @@ async def update_current_user(
         NotFoundError: If the account no longer exists (404).
         ValidationError: If the payload fails validation (422).
     """
-    return await auth_controller.update_user_profile(int(current_user["id"]), payload, db)
+    return await auth_controller.update_user_profile(current_user.id, payload, db)
 
 
 @router.post(

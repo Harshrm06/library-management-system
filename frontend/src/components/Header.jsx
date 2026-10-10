@@ -35,6 +35,9 @@ const NAV_LINKS = [
   { to: ROUTES.catalog, label: 'Browse Books' },
   { to: ROUTES.borrowingHistory, label: 'My Borrowing History' },
   { to: ROUTES.adminDashboard, label: 'Admin Dashboard', adminOnly: true },
+  { to: ROUTES.adminUsers, label: 'Manage Users', adminOnly: true },
+  { to: ROUTES.adminBooks, label: 'Manage Books', adminOnly: true },
+  { to: ROUTES.adminBorrowingHistory, label: 'Borrowing History', adminOnly: true },
 ];
 
 /**
@@ -128,6 +131,7 @@ export default function Header() {
           className ? `${className} ${navLinkClass(state)}` : navLinkClass(state)
         }
         end={link.to === ROUTES.dashboard}
+        
       >
         {link.label}
       </NavLink>
@@ -198,6 +202,12 @@ export default function Header() {
                   <Link to={ROUTES.profile} role="menuitem" className="menu-item" state={{ edit: true }}>
                     Edit profile
                   </Link>
+
+                  {user?.role === 'admin' && (
+                    <Link to={ROUTES.adminDashboard} className="text-blue-600 hover:text-blue-800">
+                        Admin Dashboard
+                    </Link>
+                  )}
 
                   {confirmingLogout ? (
                     <div className="mt-1 border-t border-ink-100 px-3 py-2">

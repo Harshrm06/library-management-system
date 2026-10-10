@@ -1,36 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/LoadingSpinner';
-import  borrowService  from '../services/borrowService';
+import { adminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../utils/constants';
 
-export default function BorrowingHistoryPage() {
+
+export default function AdminBorrowingHistoryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [borrowings, setBorrowings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [skip, setSkip] = useState(0);
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const limit = 10;
 
   useEffect(() => {
-    if (!user) {
-      navigate(ROUTES.login);
+    if (user?.role !== 'admin') {
+      navigate(ROUTES.unauthorized);
       return;
     }
 
-    loadHistory();
-  }, [user, navigate, skip, status]);
+    loadBorrowings();
+  }, [user, navigate, skip, status, startDate, endDate]);
 
-  const loadHistory = async () => {
+  const loadBorrowings = async () => {
     try {
       setLoading(true);
-      const data = await borrowService.getMemberHistory(skip, limit);
-      setBorrowings(data.records || data.borrowing_records || []);
+      const filters = {};
+      if (status) filters.status = status;
+      if (startDate) filters.start_date = startDate;
+      if (endDate) filters.end_date = endDate;
+
+      const data = await adminService.getBorrowingHistory(skip, limit, filters);
+      setBorrowings(data.items || []);
       setTotal(data.total || 0);
       setError(null);
     } catch (err) {
@@ -38,23 +45,6 @@ export default function BorrowingHistoryPage() {
       setBorrowings([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleReturnBook = async (borrowingId, bookTitle, fineAmount) => {
-    const confirmMsg = fineAmount > 0 
-      ? `Return "${bookTitle}"? Fine: ₹${fineAmount.toFixed(2)}`
-      : `Return "${bookTitle}"?`;
-    
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      await borrowService.returnBook(borrowingId);
-      setSuccess(`"${bookTitle}" returned successfully`);
-      loadHistory();
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError(err.message || 'Failed to return book');
     }
   };
 
@@ -83,9 +73,9 @@ export default function BorrowingHistoryPage() {
   if (loading && borrowings.length === 0) return <LoadingSpinner />;
 
   return (
-    <>
-    <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">My Borrowing History</h1>
+    <div>
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">Borrowing History (All Members)</h1>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
@@ -93,28 +83,61 @@ export default function BorrowingHistoryPage() {
           </div>
         )}
 
-        {success && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-            {success}
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-white p-4 rounded-lg shadow">
+          <div>
+            <label className="block text-sm font-semibold mb-2">Status</label>
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setSkip(0);
+              }}
+              className="w-full px-4 py-2 border rounded"
+            >
+              <option value="">All Statuses</option>
+              <option value="BORROWED">Borrowed</option>
+              <option value="RETURNED">Returned</option>
+              <option value="OVERDUE">Overdue</option>
+            </select>
           </div>
-        )}
-
-        {/* Filter by Status */}
-        <div className="mb-6 bg-white p-4 rounded-lg shadow">
-          <label className="block text-sm font-semibold mb-2">Filter by Status</label>
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setSkip(0);
-            }}
-            className="px-4 py-2 border rounded"
-          >
-            <option value="">All</option>
-            <option value="BORROWED">Currently Borrowed</option>
-            <option value="RETURNED">Returned</option>
-            <option value="OVERDUE">Overdue</option>
-          </select>
+          <div>
+            <label className="block text-sm font-semibold mb-2">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setSkip(0);
+              }}
+              className="w-full px-4 py-2 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-2">End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setSkip(0);
+              }}
+              className="w-full px-4 py-2 border rounded"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={() => {
+                setStatus('');
+                setStartDate('');
+                setEndDate('');
+                setSkip(0);
+              }}
+              className="w-full bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
 
         {/* Borrowing Table */}
@@ -124,19 +147,20 @@ export default function BorrowingHistoryPage() {
               <table className="w-full">
                 <thead className="bg-gray-100 border-b">
                   <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold">Member Email</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">Book Title</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">Borrow Date</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">Due Date</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">Return Date</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">Fine (₹)</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {borrowings.map((record) => (
                     <tr key={record.id} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium">{record.book_title || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm">{record.user_email || record.user?.email || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm font-medium">{record.book_title || record.book?.title || 'N/A'}</td>
                       <td className="px-6 py-4 text-sm">{formatDate(record.borrow_date)}</td>
                       <td className="px-6 py-4 text-sm">{formatDate(record.due_date)}</td>
                       <td className="px-6 py-4 text-sm">{formatDate(record.return_date)}</td>
@@ -146,20 +170,7 @@ export default function BorrowingHistoryPage() {
                         </span>
                       </td>
                       <td className={`px-6 py-4 text-sm ${getFineColor(record.fine_amount || 0)}`}>
-                        ₹{(record.fine_amount || 0).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {record.status === 'BORROWED' && (
-                          <button
-                            onClick={() => handleReturnBook(record.id, record.book_title, record.fine_amount || 0)}
-                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Return
-                          </button>
-                        )}
-                        {record.status !== 'BORROWED' && (
-                          <span className="text-gray-400 text-sm">—</span>
-                        )}
+                        ₹{(Number(record.fine_amount) || 0).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -192,6 +203,6 @@ export default function BorrowingHistoryPage() {
           <p className="text-gray-600 bg-white p-6 rounded-lg">No borrowing records found</p>
         )}
       </div>
-    </>
+    </div>
   );
 }

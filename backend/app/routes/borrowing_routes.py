@@ -35,6 +35,7 @@ from app.config import settings
 from app.controllers import borrowing_controller
 from app.database import get_db
 from app.middleware.auth_middleware import get_current_user, require_admin
+from app.models.user import User
 from app.routes.auth_routes import error_responses
 from app.schemas.borrowing_record_schema import (
     BorrowRecordResponse,
@@ -130,7 +131,7 @@ def _history_filters(
 )
 async def borrow_book(
     payload: BorrowRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BorrowRecordResponse:
     """Lend a copy of a book to the caller.
@@ -152,7 +153,7 @@ async def borrow_book(
         InternalServerError: If the insert fails (500).
     """
     return await borrowing_controller.borrow_book(
-        user_id=int(current_user["id"]),
+        user_id=current_user.id,
         book_id=payload.book_id,
         db=db,
     )
@@ -175,7 +176,7 @@ async def borrow_book(
 )
 async def return_book(
     payload: ReturnRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BorrowRecordResponse:
     """Take a borrowed copy back.
@@ -196,7 +197,7 @@ async def return_book(
         InternalServerError: If the update fails (500).
     """
     return await borrowing_controller.return_book(
-        user_id=int(current_user["id"]),
+        user_id=current_user.id,
         borrowing_record_id=payload.borrowing_record_id,
         db=db,
     )
@@ -236,7 +237,7 @@ async def read_borrowing_history(
         description="Latest issue date to include, inclusive",
         examples=["2026-12-31T23:59:59"],
     ),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Return a page of the caller's loans.
@@ -263,7 +264,7 @@ async def read_borrowing_history(
         skip, limit, status_filter, start_date, end_date
     )
     return await borrowing_controller.get_borrowing_history(
-        user_id=int(current_user["id"]),
+        user_id=current_user.id,
         db=db,
         **filters,
     )
@@ -392,7 +393,7 @@ async def read_borrowing_record(
     borrowing_record_id: int = Path(
         ..., ge=1, description="Primary key of the loan"
     ),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BorrowRecordResponse:
     """Return one loan owned by the caller.
@@ -411,7 +412,7 @@ async def read_borrowing_record(
         ForbiddenError: If the loan belongs to another member (403).
     """
     return await borrowing_controller.get_borrowing_record(
-        user_id=int(current_user["id"]),
+        user_id=current_user.id,
         borrowing_record_id=borrowing_record_id,
         db=db,
     )

@@ -15,33 +15,57 @@
  * // Submitted payload omits the client-only `confirmPassword` field.
  */
 
-import { useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { CircularProgress, IconButton, InputAdornment } from '@mui/material';
+import { useMemo, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { CircularProgress, IconButton, InputAdornment } from "@mui/material";
+import authService from "../services/authService";
 
-import FormError from '../components/FormError';
-import FormInput from '../components/FormInput';
-import Toast from '../components/Toast';
-import { useAuth } from '../hooks/useAuth';
-import { scorePasswordStrength, validateRegistration } from '../utils/validators';
-import { ROUTES } from '../utils/constants';
+import FormError from "../components/FormError";
+import FormInput from "../components/FormInput";
+import Toast from "../components/Toast";
+import { useAuth } from "../hooks/useAuth";
+import {
+  scorePasswordStrength,
+  validateRegistration,
+} from "../utils/validators";
+import { ROUTES } from "../utils/constants";
 
 const EMPTY_FORM = {
-  email: '',
-  password: '',
-  confirmPassword: '',
-  firstName: '',
-  lastName: '',
-  phone: '',
-  address: '',
+  email: "",
+  password: "",
+  confirmPassword: "",
+  first_name: "",
+  last_name: "",
+  phone: "",
+  address: "",
 };
 
 /** Tailwind classes for each strength label. */
 const STRENGTH_STYLES = {
-  empty: { fill: 'w-0', bar: 'bg-ink-200', text: 'text-ink-500', label: 'Enter a password' },
-  weak: { fill: 'w-1/5', bar: 'bg-red-500', text: 'text-red-600', label: 'Weak' },
-  medium: { fill: 'w-3/5', bar: 'bg-amber-500', text: 'text-amber-600', label: 'Medium' },
-  strong: { fill: 'w-full', bar: 'bg-emerald-500', text: 'text-emerald-600', label: 'Strong' },
+  empty: {
+    fill: "w-0",
+    bar: "bg-ink-200",
+    text: "text-ink-500",
+    label: "Enter a password",
+  },
+  weak: {
+    fill: "w-1/5",
+    bar: "bg-red-500",
+    text: "text-red-600",
+    label: "Weak",
+  },
+  medium: {
+    fill: "w-3/5",
+    bar: "bg-amber-500",
+    text: "text-amber-600",
+    label: "Medium",
+  },
+  strong: {
+    fill: "w-full",
+    bar: "bg-emerald-500",
+    text: "text-emerald-600",
+    label: "Strong",
+  },
 };
 
 /**
@@ -50,7 +74,12 @@ const STRENGTH_STYLES = {
  * @returns {JSX.Element} The page.
  */
 export default function RegisterPage() {
-  const { register, isAuthenticated, loading: sessionLoading, error: authError } = useAuth();
+  const {
+    register,
+    isAuthenticated,
+    loading: sessionLoading,
+    error: authError,
+  } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -69,7 +98,10 @@ export default function RegisterPage() {
   );
   const strength = STRENGTH_STYLES[strengthLabel];
 
-  const validationErrors = useMemo(() => validateRegistration(formData), [formData]);
+  const validationErrors = useMemo(
+    () => validateRegistration(formData),
+    [formData],
+  );
   const hasErrors = Object.keys(validationErrors).length > 0;
 
   if (!sessionLoading && isAuthenticated) {
@@ -121,16 +153,32 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const result = await register(formData);
+
       if (result.success) {
-        navigate(ROUTES.login, { replace: true, state: { registered: true } });
+        // Auto-login after registration
+        setTimeout(async () => {
+          try {
+            const loginRes = await authService.login(
+              formData.email,
+              formData.password,
+            );
+            if (loginRes && loginRes.success) {
+              navigate(ROUTES.dashboard, { replace: true });
+            } else {
+              navigate(ROUTES.login, { replace: true });
+            }
+          } catch (e) {
+            navigate(ROUTES.login, { replace: true });
+          }
+        }, 1000);
         return;
       }
+
       setLoading(false);
       if (result.fieldErrors) {
         setErrors(result.fieldErrors);
       }
-    } catch {
-      // The service reports failures as data; this only guards a broken provider.
+    } catch (err) {
       setLoading(false);
     }
   }
@@ -147,16 +195,19 @@ export default function RegisterPage() {
           </header>
 
           <Toast severity="error" message={authError} className="mb-4" />
+          <button onClick={() => console.log("Button works!")}>
+            Test Click
+          </button>
 
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="grid gap-4 sm:grid-cols-2">
               <FormInput
                 label="First name"
-                name="firstName"
-                value={formData.firstName}
+                name="first_name"
+                value={formData.first_name}
                 onChange={handleChange}
-                onBlur={() => handleBlur('firstName')}
-                error={errors.firstName}
+                onBlur={() => handleBlur("first_name")}
+                error={errors.first_name}
                 ariaLabel="First name"
                 autoComplete="given-name"
                 disabled={busy}
@@ -164,11 +215,11 @@ export default function RegisterPage() {
               />
               <FormInput
                 label="Last name"
-                name="lastName"
-                value={formData.lastName}
+                name="last_name"
+                value={formData.last_name}
                 onChange={handleChange}
-                onBlur={() => handleBlur('lastName')}
-                error={errors.lastName}
+                onBlur={() => handleBlur("last_name")}
+                error={errors.last_name}
                 ariaLabel="Last name"
                 autoComplete="family-name"
                 disabled={busy}
@@ -182,7 +233,7 @@ export default function RegisterPage() {
               type="email"
               value={formData.email}
               onChange={handleChange}
-              onBlur={() => handleBlur('email')}
+              onBlur={() => handleBlur("email")}
               error={errors.email}
               ariaLabel="Email address"
               autoComplete="email"
@@ -194,10 +245,10 @@ export default function RegisterPage() {
               <FormInput
                 label="Password"
                 name="password"
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 value={formData.password}
                 onChange={handleChange}
-                onBlur={() => handleBlur('password')}
+                onBlur={() => handleBlur("password")}
                 error={errors.password}
                 ariaLabel="Password"
                 autoComplete="new-password"
@@ -210,10 +261,12 @@ export default function RegisterPage() {
                       onMouseDown={(event) => event.preventDefault()}
                       edge="end"
                       size="small"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                       aria-pressed={showPassword}
                     >
-                      {showPassword ? 'Hide' : 'Show'}
+                      {showPassword ? "Hide" : "Show"}
                     </IconButton>
                   </InputAdornment>
                 }
@@ -227,23 +280,31 @@ export default function RegisterPage() {
                     aria-label="Password strength"
                     aria-valuemin={0}
                     aria-valuemax={5}
-                    aria-valuenow={requirements.filter((item) => item.met).length}
+                    aria-valuenow={
+                      requirements.filter((item) => item.met).length
+                    }
                     aria-valuetext={strength.label}
                   >
                     <div
                       className={`h-full rounded-full transition-all ${strength.bar} ${strength.fill}`}
                     />
                   </div>
-                  <span className={`text-xs font-medium ${strength.text}`}>{strength.label}</span>
+                  <span className={`text-xs font-medium ${strength.text}`}>
+                    {strength.label}
+                  </span>
                 </div>
 
                 <ul className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
                   {requirements.map((requirement) => (
                     <li
                       key={requirement.id}
-                      className={requirement.met ? 'text-emerald-600' : 'text-ink-500'}
+                      className={
+                        requirement.met ? "text-emerald-600" : "text-ink-500"
+                      }
                     >
-                      <span aria-hidden="true">{requirement.met ? '✓' : '•'}</span>{' '}
+                      <span aria-hidden="true">
+                        {requirement.met ? "✓" : "•"}
+                      </span>{" "}
                       {requirement.label}
                     </li>
                   ))}
@@ -254,10 +315,10 @@ export default function RegisterPage() {
             <FormInput
               label="Confirm password"
               name="confirmPassword"
-              type={showPassword ? 'text' : 'password'}
+              type={showPassword ? "text" : "password"}
               value={formData.confirmPassword}
               onChange={handleChange}
-              onBlur={() => handleBlur('confirmPassword')}
+              onBlur={() => handleBlur("confirmPassword")}
               error={errors.confirmPassword}
               ariaLabel="Confirm password"
               autoComplete="new-password"
@@ -300,31 +361,43 @@ export default function RegisterPage() {
                 aria-label="Accept the terms of service"
               />
               <span>
-                I accept the library terms of service. (Optional in this preview.)
+                I accept the library terms of service. (Optional in this
+                preview.)
               </span>
             </label>
 
-            <button type="submit" className="btn-primary w-full" disabled={busy || hasErrors}>
+            <button
+              type="submit"
+              className="btn-primary w-full"
+              disabled={busy || hasErrors}
+            >
               {busy ? (
                 <span className="flex items-center justify-center gap-2">
-                  <CircularProgress size={18} color="inherit" aria-hidden="true" />
-                  {loading ? 'Creating account…' : 'Restoring session…'}
+                  <CircularProgress
+                    size={18}
+                    color="inherit"
+                    aria-hidden="true"
+                  />
+                  {loading ? "Creating account…" : "Restoring session…"}
                 </span>
               ) : (
-                'Create account'
+                "Create account"
               )}
             </button>
 
             <FormError
-              message={hasErrors ? 'Please fix the highlighted fields.' : ''}
+              message={hasErrors ? "Please fix the highlighted fields." : ""}
               className="text-center"
             />
           </form>
         </div>
 
         <p className="mt-6 text-center text-sm text-ink-600">
-          Already have an account?{' '}
-          <Link to={ROUTES.login} className="font-medium text-brand-700 hover:text-brand-800">
+          Already have an account?{" "}
+          <Link
+            to={ROUTES.login}
+            className="font-medium text-brand-700 hover:text-brand-800"
+          >
             Sign in
           </Link>
         </p>
