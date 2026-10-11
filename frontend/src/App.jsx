@@ -73,7 +73,7 @@ export default function App() {
           <Route
             path={ROUTES.adminBorrowingHistory}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <AdminBorrowingHistoryPage />
               </ProtectedRoute>
             }

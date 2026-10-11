@@ -170,6 +170,11 @@ class BorrowRecordResponse(BorrowingRecordBaseSchema):
         description="UTC timestamp the loan row was created",
         examples=["2026-01-05T09:30:00"],
     )
+    book_title: Optional[str] = Field(
+        default=None,
+        description="Title of the borrowed book",
+        examples=["Dune"],
+    )
 
 
 class BorrowingHistoryResponse(BaseModel):

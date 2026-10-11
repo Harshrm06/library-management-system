@@ -176,6 +176,18 @@ class CreateBookRequest(BookBaseSchema):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_total_copies(cls, data: Any) -> Any:
+        """Allow total_copies as an alias for total_quantity."""
+        if isinstance(data, dict):
+            data = dict(data)
+            if "total_copies" in data and "total_quantity" not in data:
+                data["total_quantity"] = data.pop("total_copies")
+            elif "total_copies" in data:
+                data.pop("total_copies")
+        return data
+
     total_quantity: int = Field(
         ge=1,
         le=100000,
@@ -222,6 +234,18 @@ class UpdateBookRequest(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_total_copies(cls, data: Any) -> Any:
+        """Allow total_copies as an alias for total_quantity."""
+        if isinstance(data, dict):
+            data = dict(data)
+            if "total_copies" in data and "total_quantity" not in data:
+                data["total_quantity"] = data.pop("total_copies")
+            elif "total_copies" in data:
+                data.pop("total_copies")
+        return data
 
     title: Optional[str] = Field(
         default=None, min_length=1, max_length=255, description="New title"

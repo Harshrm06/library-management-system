@@ -338,10 +338,18 @@ export function AuthProvider({ children }) {
 
   useEffect(() => clearErrorTimer, [clearErrorTimer]);
 
+  const updateUser = useCallback((nextUser) => {
+    setUser(nextUser);
+    const persist = readStorage(STORAGE_KEYS.rememberMe) === 'true';
+    writeStorage(STORAGE_KEYS.user, JSON.stringify(nextUser), persist);
+  }, []);
+
   const value = useMemo(
     () => ({
       isAuthenticated: Boolean(user),
       user,
+      setUser,
+      updateUser,
       token,
       loading,
       error,
@@ -354,7 +362,7 @@ export function AuthProvider({ children }) {
       clearSession,
       setError,
     }),
-    [user, token, loading, error, login, register, logout, getAuthToken, refreshToken, clearSession, setError],
+    [user, updateUser, token, loading, error, login, register, logout, getAuthToken, refreshToken, clearSession, setError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

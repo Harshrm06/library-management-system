@@ -122,6 +122,11 @@ class BorrowingRecord(Base):
     user: Mapped["User"] = relationship("User", back_populates="borrowings")
     book: Mapped["Book"] = relationship("Book", back_populates="borrowings")
 
+    @property
+    def book_title(self) -> str | None:
+        """Return the title of the associated book if loaded."""
+        return self.book.title if self.book else None
+
     def is_overdue(self) -> bool:
         """Return ``True`` when the copy is late.
 

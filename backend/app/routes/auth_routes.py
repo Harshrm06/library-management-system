@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.controllers import auth_controller
 from app.database import get_db
-from app.middleware.auth_middleware import get_current_user
+from app.middleware.auth_middleware import get_current_user, require_admin
 from app.schemas.user_schema import (
     ErrorResponse,
     LoginSuccessResponse,
@@ -38,7 +38,10 @@ from app.schemas.user_schema import (
 )
 from fastapi import APIRouter, Response
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"],
+)
 
 # Add OPTIONS handlers for CORS preflight
 @router.options("/register")
@@ -49,13 +52,6 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 async def handle_options():
     """Handle CORS preflight requests."""
     return Response(status_code=200)
-
-# Rest of your routes continue below...
-
-router = APIRouter(
-    prefix="/auth",
-    tags=["auth"],
-)
 
 ERROR_EXAMPLES: Dict[str, Dict[str, Any]] = {
     "400": {
@@ -199,30 +195,34 @@ UPDATE_REQUEST_EXAMPLE: Dict[str, Any] = {
     "/register",
     response_model=RegisterSuccessResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Register a new member account",
+    summary="Register a new member account (Admin only)",
     description=(
-        "Creates an account with the `member` role and returns the created "
-        "user. Passwords must be at least 6 characters and contain a letter "
+        "Restricted to administrators. Creates an account with the `member` role and returns "
+        "the created user. Passwords must be at least 6 characters and contain a letter "
         "and a digit. A duplicate email is rejected with 409 Conflict."
     ),
-    responses=error_responses(409, 422),
+    responses=error_responses(401, 403, 409, 422),
     openapi_extra=REGISTER_REQUEST_EXAMPLE,
 )
 async def register(
     payload: UserRegisterRequest,
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Create a member account.
+    """Create a member account (restricted to administrators).
 
     Args:
         payload: Registration data: email, password, first and last name,
             with optional phone and address.
+        _admin: Authenticated administrator dependency.
         db: Database session dependency.
 
     Returns:
         dict: 201 with `{success, message, data: {user}, timestamp}`.
 
     Raises:
+        UnauthorizedError: If unauthenticated (401).
+        PermissionDeniedError: If caller is not admin (403).
         ConflictError: If the email is already registered (409).
         ValidationError: If the payload fails validation (422).
     """

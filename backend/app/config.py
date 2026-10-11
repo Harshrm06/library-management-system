@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 3600
 
     jwt_secret: str = Field(
-        default="change_me_in_production",
+        default="change_me_in_production_jwt_secret_key_32_bytes",
         min_length=8,
     )
     jwt_expiry_hours: int = 24

@@ -23,7 +23,7 @@ from app.schemas.borrowing_schema import (
     AdminBorrowingHistoryResponse,
     DashboardStatisticsSchema,
 )
-from app.schemas.user_schema import UserListResponse, UserOut, UserRoleUpdate
+from app.schemas.user_schema import UserCreate, UserListResponse, UserOut, UserRoleUpdate
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -61,6 +61,8 @@ def list_users(
     page_size: int = Query(default=10, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(default=None, description="Optional search term matching email/name"),
     role: Optional[str] = Query(default=None, description="Optional filter by UserRole"),
+    skip: Optional[int] = Query(default=None, ge=0, description="Optional offset (skip)"),
+    limit: Optional[int] = Query(default=None, ge=1, le=100, description="Optional limit"),
     current_admin: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> UserListResponse:
@@ -71,12 +73,18 @@ def list_users(
         page_size: Items per page.
         search: Optional search term.
         role: Optional role filter.
+        skip: Optional offset for skip/limit pagination.
+        limit: Optional limit for skip/limit pagination.
         current_admin: Authenticated user with ADMIN role.
         db: Database session.
 
     Returns:
         UserListResponse: Paginated user listing without sensitive credentials.
     """
+    if skip is not None and limit is not None:
+        page = (skip // limit) + 1
+        page_size = limit
+
     parsed_role: Optional[UserRole] = None
     if role is not None and role.strip():
         r_clean = role.strip().lower()
@@ -165,6 +173,30 @@ def delete_user(
     return admin_controller.delete_user(db, current_admin, user_id)
 
 
+@router.post(
+    "/users",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new member account",
+)
+def create_user(
+    payload: UserCreate,
+    current_admin: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """Create a new member account. Restricted to administrators.
+
+    Args:
+        payload: Validated user creation details.
+        current_admin: Authenticated administrator.
+        db: Database session.
+
+    Returns:
+        UserOut: Created user profile.
+    """
+    return admin_controller.create_user(db, payload, current_admin)
+
+
 # ============================================================================
 # BOOK CATALOG & INVENTORY MANAGEMENT ROUTE ENDPOINTS
 # ============================================================================
@@ -182,6 +214,8 @@ def list_books(
     search: Optional[str] = Query(default=None, description="Optional search term matching title/author/isbn/genre"),
     genre: Optional[str] = Query(default=None, description="Optional genre filter"),
     available: Optional[bool] = Query(default=None, description="Optional availability filter"),
+    skip: Optional[int] = Query(default=None, ge=0, description="Optional offset (skip)"),
+    limit: Optional[int] = Query(default=None, ge=1, le=100, description="Optional limit"),
     current_admin: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> BookListResponse:
@@ -193,12 +227,18 @@ def list_books(
         search: Optional search term.
         genre: Optional genre filter.
         available: Optional availability filter.
+        skip: Optional offset for skip/limit pagination.
+        limit: Optional limit for skip/limit pagination.
         current_admin: Authenticated user with ADMIN role.
         db: Database session.
 
     Returns:
         BookListResponse: Paginated book listing with inventory details.
     """
+    if skip is not None and limit is not None:
+        page = (skip // limit) + 1
+        page_size = limit
+
     return admin_controller.list_books(
         db, page=page, page_size=page_size, search=search, genre=genre, available=available
     )
@@ -326,6 +366,10 @@ def list_admin_borrowings(
     user_id: Optional[int] = Query(default=None, description="Optional member ID filter"),
     from_date: Optional[str] = Query(default=None, description="Optional start issue_date (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(default=None, description="Optional end issue_date (YYYY-MM-DD)"),
+    start_date: Optional[str] = Query(default=None, description="Optional start issue_date alias"),
+    end_date: Optional[str] = Query(default=None, description="Optional end issue_date alias"),
+    skip: Optional[int] = Query(default=None, ge=0, description="Optional offset (skip)"),
+    limit: Optional[int] = Query(default=None, ge=1, le=100, description="Optional limit"),
     current_admin: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> AdminBorrowingHistoryResponse:
@@ -339,12 +383,25 @@ def list_admin_borrowings(
         user_id: Optional member filter.
         from_date: Optional start issue_date.
         to_date: Optional end issue_date.
+        start_date: Optional start issue_date alias.
+        end_date: Optional end issue_date alias.
+        skip: Optional offset for skip/limit pagination.
+        limit: Optional limit for skip/limit pagination.
         current_admin: Authenticated user with ADMIN role.
         db: Database session.
 
     Returns:
         AdminBorrowingHistoryResponse: Paginated borrowing records with member and book details.
     """
+    if skip is not None and limit is not None:
+        page = (skip // limit) + 1
+        page_size = limit
+
+    if from_date is None and start_date is not None:
+        from_date = start_date
+    if to_date is None and end_date is not None:
+        to_date = end_date
+
     parsed_status: Optional[BorrowingStatus] = None
     if status is not None and status.strip():
         s_clean = status.strip().upper()

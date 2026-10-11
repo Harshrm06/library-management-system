@@ -35,7 +35,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import utcnow
 from app.models.book import Book
@@ -306,6 +306,7 @@ def _borrow_book(user_id: int, book_id: int, db: Session) -> BorrowRecordRespons
 
     db.refresh(record)
     db.refresh(book)
+    record.book = book
     logger.info(
         "Borrowed book %s (id=%s) to user %s; due %s, %s copies left",
         book.title,
@@ -398,6 +399,7 @@ def _return_book(
 
     db.refresh(record)
     db.refresh(book)
+    record.book = book
     logger.info(
         "Returned borrowing record %s (book %s, user %s); status=%s fine=%s",
         record.id,
@@ -445,7 +447,8 @@ def _history_page(
 
         rows: List[BorrowingRecord] = list(
             db.execute(
-                filters.order_by(BorrowingRecord.issue_date.desc())
+                filters.options(joinedload(BorrowingRecord.book))
+                .order_by(BorrowingRecord.issue_date.desc())
                 .offset(skip)
                 .limit(limit)
             )

@@ -27,12 +27,17 @@ def _create_user(db, email="history_user@example.com"):
     return user
 
 
+import itertools
+
+_isbn_seq = itertools.count(20000)
+
+
 def _create_book(db, title="History Book", author="Author Person"):
     """Helper to create and persist a book."""
     book = Book(
         title=title,
         author=author,
-        isbn=f"978{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        isbn=f"978{int(datetime.now(timezone.utc).timestamp())}{next(_isbn_seq)}",
         total_quantity=5,
         available_quantity=5,
     )

@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../utils/constants';
-
 
 export default function AdminBorrowingHistoryPage() {
   const navigate = useNavigate();
@@ -24,7 +23,6 @@ export default function AdminBorrowingHistoryPage() {
       navigate(ROUTES.unauthorized);
       return;
     }
-
     loadBorrowings();
   }, [user, navigate, skip, status, startDate, endDate]);
 
@@ -41,7 +39,7 @@ export default function AdminBorrowingHistoryPage() {
       setTotal(data.total || 0);
       setError(null);
     } catch (err) {
-      setError(err.message || 'Failed to load borrowing history');
+      setError(err.response?.data?.message || err.userMessage || err.message || 'Failed to load circulation records');
       setBorrowings([]);
     } finally {
       setLoading(false);
@@ -49,160 +47,219 @@ export default function AdminBorrowingHistoryPage() {
   };
 
   const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString();
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
-  const getStatusBadgeColor = (status) => {
-    switch (status) {
+  const getStatusBadge = (recStatus) => {
+    const normalized = String(recStatus || '').toUpperCase();
+    switch (normalized) {
       case 'BORROWED':
-        return 'bg-blue-100 text-blue-800';
+        return (
+          <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 border border-brand-200">
+            On Loan
+          </span>
+        );
       case 'RETURNED':
-        return 'bg-green-100 text-green-800';
+        return (
+          <span className="rounded-full bg-forest-50 px-2.5 py-0.5 text-xs font-semibold text-forest-800 border border-forest-300">
+            Returned
+          </span>
+        );
       case 'OVERDUE':
-        return 'bg-red-100 text-red-800';
+        return (
+          <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-800 border border-rose-300">
+            Overdue
+          </span>
+        );
       default:
-        return 'bg-gray-100 text-gray-800';
+        return (
+          <span className="rounded-full bg-cream-200 px-2.5 py-0.5 text-xs font-semibold text-ink-700">
+            {recStatus}
+          </span>
+        );
     }
   };
 
-  const getFineColor = (fine) => {
-    return fine > 0 ? 'text-red-600 font-semibold' : 'text-green-600';
-  };
-
-  if (loading && borrowings.length === 0) return <LoadingSpinner />;
-
   return (
-    <div>
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Borrowing History (All Members)</h1>
+    <main className="page-container">
+      {/* Page Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-serif font-bold text-brand-900">
+          Circulation & Loan History
+        </h1>
+        <p className="mt-1 text-sm text-ink-600">
+          System-wide lending records across all library patrons, date filters, and accrued late penalties.
+        </p>
+      </div>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-rose-800">
+          <svg className="h-5 w-5 shrink-0 text-rose-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="text-sm font-medium">{error}</div>
+        </div>
+      )}
 
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-white p-4 rounded-lg shadow">
+      {/* Filters */}
+      <div className="card mb-6 p-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div>
-            <label className="block text-sm font-semibold mb-2">Status</label>
+            <label className="input-label" htmlFor="circ-status">Loan Status</label>
             <select
+              id="circ-status"
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value);
                 setSkip(0);
               }}
-              className="w-full px-4 py-2 border rounded"
+              className="w-full rounded-lg border border-cream-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             >
               <option value="">All Statuses</option>
-              <option value="BORROWED">Borrowed</option>
+              <option value="BORROWED">Currently On Loan</option>
               <option value="RETURNED">Returned</option>
               <option value="OVERDUE">Overdue</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-2">Start Date</label>
+            <label className="input-label" htmlFor="circ-start-date">From Date</label>
             <input
+              id="circ-start-date"
               type="date"
               value={startDate}
               onChange={(e) => {
                 setStartDate(e.target.value);
                 setSkip(0);
               }}
-              className="w-full px-4 py-2 border rounded"
+              className="w-full rounded-lg border border-cream-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-2">End Date</label>
+            <label className="input-label" htmlFor="circ-end-date">To Date</label>
             <input
+              id="circ-end-date"
               type="date"
               value={endDate}
               onChange={(e) => {
                 setEndDate(e.target.value);
                 setSkip(0);
               }}
-              className="w-full px-4 py-2 border rounded"
+              className="w-full rounded-lg border border-cream-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div className="flex items-end">
             <button
+              type="button"
               onClick={() => {
                 setStatus('');
                 setStartDate('');
                 setEndDate('');
                 setSkip(0);
               }}
-              className="w-full bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+              className="btn-secondary w-full"
             >
-              Clear Filters
+              Reset Filters
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Borrowing Table */}
-        {borrowings.length > 0 ? (
-          <>
-            <div className="overflow-x-auto bg-white rounded-lg shadow">
-              <table className="w-full">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Member Email</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Book Title</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Borrow Date</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Due Date</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Return Date</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Fine (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {borrowings.map((record) => (
-                    <tr key={record.id} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm">{record.user_email || record.user?.email || 'N/A'}</td>
-                      <td className="px-6 py-4 text-sm font-medium">{record.book_title || record.book?.title || 'N/A'}</td>
-                      <td className="px-6 py-4 text-sm">{formatDate(record.borrow_date)}</td>
-                      <td className="px-6 py-4 text-sm">{formatDate(record.due_date)}</td>
-                      <td className="px-6 py-4 text-sm">{formatDate(record.return_date)}</td>
-                      <td className="px-6 py-4 text-sm">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeColor(record.status)}`}>
-                          {record.status}
+      {/* Borrowing Table */}
+      {loading && borrowings.length === 0 ? (
+        <LoadingSpinner />
+      ) : borrowings.length > 0 ? (
+        <div className="card overflow-hidden p-0 shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-cream-300 bg-cream-50 text-xs font-semibold uppercase tracking-wider text-ink-600">
+                  <th className="px-5 py-3.5">Patron Email</th>
+                  <th className="px-5 py-3.5">Book Title</th>
+                  <th className="px-5 py-3.5">Issue Date</th>
+                  <th className="px-5 py-3.5">Due Date</th>
+                  <th className="px-5 py-3.5">Return Date</th>
+                  <th className="px-5 py-3.5">Status</th>
+                  <th className="px-5 py-3.5 text-right">Fine</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cream-200 text-sm">
+                {borrowings.map((record) => {
+                  const fine = Number(record.fine_amount) || 0;
+                  return (
+                    <tr key={record.id} className="hover:bg-cream-50/60 transition-colors">
+                      <td className="px-5 py-4 font-mono text-xs text-ink-700">
+                        {record.user_email || record.user?.email || 'N/A'}
+                      </td>
+                      <td className="px-5 py-4 font-semibold text-ink-900">
+                        {record.book_title || record.book?.title || 'Book Title'}
+                      </td>
+                      <td className="px-5 py-4 text-xs text-ink-600">
+                        {formatDate(record.issue_date || record.borrow_date)}
+                      </td>
+                      <td className="px-5 py-4 text-xs font-medium text-brand-900">
+                        {formatDate(record.due_date)}
+                      </td>
+                      <td className="px-5 py-4 text-xs text-ink-500">
+                        {formatDate(record.return_date)}
+                      </td>
+                      <td className="px-5 py-4">
+                        {getStatusBadge(record.status)}
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono text-xs">
+                        <span className={fine > 0 ? 'text-rose-600 font-semibold' : 'text-ink-600'}>
+                          ₹{fine.toFixed(2)}
                         </span>
                       </td>
-                      <td className={`px-6 py-4 text-sm ${getFineColor(record.fine_amount || 0)}`}>
-                        ₹{(Number(record.fine_amount) || 0).toFixed(2)}
-                      </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-            {/* Pagination */}
-            <div className="flex justify-between items-center mt-6">
+          {/* Pagination */}
+          <div className="flex flex-col sm:flex-row items-center justify-between border-t border-cream-300 px-5 py-3.5 gap-3 bg-cream-50/50">
+            <span className="text-xs text-ink-600">
+              Showing <span className="font-semibold">{total > 0 ? skip + 1 : 0}</span> to{' '}
+              <span className="font-semibold">{Math.min(skip + limit, total)}</span> of{' '}
+              <span className="font-semibold">{total}</span> records
+            </span>
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setSkip(Math.max(0, skip - limit))}
                 disabled={skip === 0}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded"
+                className="btn-secondary py-1.5 px-3 text-xs"
               >
                 Previous
               </button>
-              <span className="text-sm text-gray-600">
-                Showing {skip + 1}-{Math.min(skip + limit, total)} of {total}
-              </span>
               <button
+                type="button"
                 onClick={() => skip + limit < total && setSkip(skip + limit)}
                 disabled={skip + limit >= total}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded"
+                className="btn-secondary py-1.5 px-3 text-xs"
               >
                 Next
               </button>
             </div>
-          </>
-        ) : (
-          <p className="text-gray-600 bg-white p-6 rounded-lg">No borrowing records found</p>
-        )}
-      </div>
-    </div>
+          </div>
+        </div>
+      ) : (
+        <div className="card text-center py-12">
+          <svg className="mx-auto h-12 w-12 text-ink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <h3 className="mt-3 text-base font-semibold text-ink-800">No circulation records found</h3>
+          <p className="mt-1 text-sm text-ink-500">
+            There are currently no borrowing entries matching your filter criteria.
+          </p>
+        </div>
+      )}
+    </main>
   );
 }

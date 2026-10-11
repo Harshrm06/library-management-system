@@ -166,18 +166,23 @@ export async function returnBook(borrowingRecordId) {
  * const { success, data } = await getMemberHistory();
  * if (success) setRecords(data.records);
  */
-export async function getMemberHistory() {
+export async function getMemberHistory(skip = 0, limit = 10, status = '') {
   try {
-    const response = await api.get(BORROW_ENDPOINTS.history);
+    const params = { skip, limit };
+    if (status) params.status = status;
+    const response = await api.get(BORROW_ENDPOINTS.history, { params });
     const payload = unwrapPayload(response);
     const records = Array.isArray(payload.records)
       ? payload.records
       : Array.isArray(payload.borrowing_records)
         ? payload.borrowing_records
-        : Array.isArray(payload)
-          ? payload
-          : [];
-    return ok({ records }, envelopeMessage(response, 'Borrowing history loaded'));
+        : Array.isArray(payload.items)
+          ? payload.items
+          : Array.isArray(payload)
+            ? payload
+            : [];
+    const total = payload.total ?? records.length;
+    return ok({ records, total }, envelopeMessage(response, 'Borrowing history loaded'));
   } catch (error) {
     return fail(error, 'Your borrowing history could not be loaded.');
   }

@@ -23,7 +23,8 @@ from app.schemas.borrowing_schema import (
     AdminBorrowingHistoryResponse,
     DashboardStatisticsSchema,
 )
-from app.schemas.user_schema import UserListResponse, UserOut, UserRoleUpdate
+from app.schemas.user_schema import UserCreate, UserListResponse, UserOut, UserRoleUpdate
+from app.utils.bcrypt_utils import hash_password
 from app.utils.exceptions import BadRequestError, ConflictError, NotFoundError
 
 
@@ -296,6 +297,47 @@ def delete_user(db: Session, current_admin: User, user_id: int) -> Dict[str, Any
     db.delete(user)
     db.commit()
     return {"message": "User deleted successfully", "user_id": user_id}
+
+
+def create_user(db: Session, payload: UserCreate, current_admin: User) -> UserOut:
+    """Create a new member account via administrative user management.
+
+    Args:
+        db: Active database session.
+        payload: Validated user creation payload.
+        current_admin: Authenticated admin performing the creation.
+
+    Returns:
+        UserOut: Public representation of the created user (password excluded).
+
+    Raises:
+        ConflictError: If the email address is already in use.
+    """
+    normalized_email = payload.email.strip().lower()
+    existing = db.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        raise ConflictError(
+            "An account with this email already exists",
+            code="email_already_exists",
+        )
+
+    user = User(
+        email=normalized_email,
+        password_hash=hash_password(payload.password),
+        first_name=payload.first_name.strip(),
+        last_name=payload.last_name.strip(),
+        phone=payload.phone.strip() if payload.phone and payload.phone.strip() else None,
+        address=payload.address.strip() if payload.address and payload.address.strip() else None,
+        role=UserRole.MEMBER,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return UserOut.model_validate(user)
 
 
 # ============================================================================

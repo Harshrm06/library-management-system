@@ -1,44 +1,24 @@
 /**
  * Book catalog page: search, filter and paginate the collection.
  *
- * Data flows through `bookService.getAllBooks()`, which converts the 1-based page
- * number held here into the `skip`/`limit` offset the API expects. Typing is
- * debounced by 300ms, so the page re-renders on every keystroke but only settled
- * search terms reach the network.
- *
- * The genre list is derived from the books currently on screen rather than a
- * hardcoded enum: the API exposes an exact-match `genre` filter but no endpoint
- * enumerating genres, so inventing a list here would offer filters that return
- * nothing. The set grows as the user browses.
- *
- * @example
- * // Reaching page 3 with a search and filter applied.
- * <BookCatalogPage />
+ * Supports both Members and Admins borrowing books directly from the catalog
+ * with a live 14-day loan confirmation dialog.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import BookCard from '../components/BookCard';
+import BorrowModal from '../components/BorrowModal';
 import Skeleton from '../components/Skeleton';
 import Toast from '../components/Toast';
 import useDebounce from '../hooks/useDebounce';
 import { getAllBooks } from '../services/bookService';
+import borrowService from '../services/borrowService';
 import { PAGINATION } from '../utils/constants';
 
-/** Milliseconds of quiet before a search term is sent to the API. */
 const SEARCH_DEBOUNCE_MS = 300;
 
-/**
- * Build the list of page numbers to render, with ellipses for the gaps.
- *
- * Always shows the first and last page plus a window around the current one, so
- * the control stays a fixed width whether the catalog has 5 pages or 500.
- *
- * @param {number} currentPage The page being viewed.
- * @param {number} totalPages Total number of pages.
- * @returns {Array<number|'left-ellipsis'|'right-ellipsis'>} Renderable entries.
- */
 function buildPageItems(currentPage, totalPages) {
   if (totalPages <= 1) return [1];
 
@@ -62,14 +42,7 @@ function buildPageItems(currentPage, totalPages) {
   return items;
 }
 
-/**
- * Render the catalog grid and its controls.
- *
- * @returns {JSX.Element} The page.
- */
 export default function BookCatalogPage() {
-  // The genre filter is mirrored in the query string so a book's genre badge can
-  // deep-link into a pre-filtered catalog and the link is shareable.
   const [searchParams] = useSearchParams();
   const genreFromUrl = searchParams.get('genre') ?? '';
 
@@ -81,21 +54,24 @@ export default function BookCatalogPage() {
   const [selectedGenre, setSelectedGenre] = useState(genreFromUrl);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [jumpValue, setJumpValue] = useState('');
+  const [successToast, setSuccessToast] = useState('');
 
-  // Follow the URL when it changes, e.g. navigating back from a book page.
+  // Borrow Modal State
+  const [borrowTargetBook, setBorrowTargetBook] = useState(null);
+  const [borrowingBusy, setBorrowingBusy] = useState(false);
+  const [borrowModalError, setBorrowModalError] = useState('');
+  const [borrowModalSuccess, setBorrowModalSuccess] = useState('');
+
   useEffect(() => {
     setSelectedGenre(genreFromUrl);
   }, [genreFromUrl]);
 
-  // Only a settled search term triggers a request.
   const debouncedSearch = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
 
   const totalPages = Math.max(1, Math.ceil(totalBooks / pageSize));
   const hasPrevious = currentPage > 1;
   const hasNext = currentPage < totalPages;
 
-  // Guards against a slow response for an old query overwriting a newer one.
   const requestId = useRef(0);
 
   const fetchBooks = useCallback(async () => {
@@ -111,7 +87,6 @@ export default function BookCatalogPage() {
       genre: selectedGenre,
     });
 
-    // A newer request has already started, so this answer is stale.
     if (requestId.current !== id) return;
 
     setLoading(false);
@@ -124,19 +99,15 @@ export default function BookCatalogPage() {
     setBooks(result.data.books);
     setTotalBooks(result.data.total);
 
-    // A search or filter can leave the reader past the last page (page 5 of 2),
-    // so fall back to the final page rather than showing an empty grid.
-    if (result.data.page > result.data.totalPages) {
+    if (result.data.page > result.data.totalPages && result.data.totalPages > 0) {
       setCurrentPage(result.data.totalPages);
     }
   }, [currentPage, pageSize, debouncedSearch, selectedGenre]);
 
-  // Mount, and every change to the query that affects the result set.
   useEffect(() => {
     fetchBooks();
   }, [fetchBooks]);
 
-  // A new search or filter invalidates the current page number.
   function handleSearchChange(event) {
     setSearchQuery(event.target.value);
     setCurrentPage(1);
@@ -145,14 +116,6 @@ export default function BookCatalogPage() {
   function handleGenreChange(event) {
     setSelectedGenre(event.target.value);
     setCurrentPage(1);
-  }
-
-  function handleJumpSubmit(event) {
-    event.preventDefault();
-    const requested = Number(jumpValue);
-    setJumpValue('');
-    if (!Number.isInteger(requested)) return;
-    setCurrentPage(Math.min(Math.max(1, requested), totalPages));
   }
 
   function goToPage(page) {
@@ -165,137 +128,186 @@ export default function BookCatalogPage() {
     setCurrentPage(1);
   }
 
-  // Genres seen so far. Kept in a ref-free state update so the dropdown keeps
-  // every option the reader has already browsed past.
   const genres = useMemo(() => {
     const seen = new Set();
     for (const book of books) {
       if (book.genre) seen.add(book.genre);
     }
-    // The active filter must stay selectable even when it matches nothing.
     if (selectedGenre) seen.add(selectedGenre);
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [books, selectedGenre]);
+
+  // Borrow Flow
+  const handleOpenBorrowModal = (book) => {
+    setBorrowTargetBook(book);
+    setBorrowModalError('');
+    setBorrowModalSuccess('');
+  };
+
+  const handleConfirmBorrow = async () => {
+    if (!borrowTargetBook) return;
+
+    setBorrowingBusy(true);
+    setBorrowModalError('');
+    setBorrowModalSuccess('');
+
+    try {
+      const res = await borrowService.borrowBook(borrowTargetBook.id);
+      if (res.success) {
+        setBorrowModalSuccess(`Successfully borrowed "${borrowTargetBook.title}".`);
+        setSuccessToast(`"${borrowTargetBook.title}" borrowed. You can find it under My Loans.`);
+        fetchBooks();
+        setTimeout(() => {
+          setBorrowTargetBook(null);
+          setBorrowingBusy(false);
+          setBorrowModalSuccess('');
+        }, 1200);
+      } else {
+        setBorrowModalError(res.message || 'Unable to borrow book.');
+        setBorrowingBusy(false);
+      }
+    } catch (err) {
+      setBorrowModalError(err.response?.data?.message || err.message || 'Borrowing request failed.');
+      setBorrowingBusy(false);
+    }
+  };
 
   const hasFilters = Boolean(searchQuery) || Boolean(selectedGenre);
   const showEmptyState = !loading && books.length === 0;
 
   return (
     <main className="page-container">
+      {/* Header */}
       <header className="mb-6">
-        <h1 className="text-2xl">Browse Books</h1>
+        <h1 className="text-2xl font-serif font-bold text-brand-900">Library Catalog</h1>
         <p className="mt-1 text-sm text-ink-600">
-          Search the collection by title, author or ISBN.
+          Discover titles in our collection. Available books can be checked out directly.
         </p>
       </header>
 
+      {/* Search and Filters */}
       <section
-        className="card sticky top-16 z-10 mb-6 flex flex-col gap-3 sm:flex-row sm:items-end"
+        className="card mb-6 flex flex-col gap-3 sm:flex-row sm:items-end border-cream-300 bg-white"
         aria-label="Search and filter"
       >
         <div className="flex-1">
-          <label className="input-label" htmlFor="book-search">
-            Search
+          <label className="input-label" htmlFor="catalog-search">
+            Search Titles, Authors, or ISBN
           </label>
           <div className="relative">
             <span
-              className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-ink-500"
+              className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-ink-400"
               aria-hidden="true"
             >
-              &#9906;
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </span>
             <input
-              id="book-search"
+              id="catalog-search"
               type="search"
               value={searchQuery}
               onChange={handleSearchChange}
-              placeholder="Title, author or ISBN…"
+              placeholder="e.g. Orwell, 1984, 978…"
               autoComplete="off"
-              className="w-full rounded-lg border border-ink-300 py-2 pl-9 pr-3 text-sm"
+              className="w-full rounded-lg border border-cream-300 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>
 
         <div className="sm:w-56">
-          <label className="input-label" htmlFor="book-genre">
-            Genre
+          <label className="input-label" htmlFor="catalog-genre">
+            Genre Filter
           </label>
           <select
-            id="book-genre"
+            id="catalog-genre"
             value={selectedGenre}
             onChange={handleGenreChange}
-            className="w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-cream-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           >
             <option value="">All Genres</option>
-            {genres.map((genre) => (
-              <option key={genre} value={genre}>
-                {genre}
+            {genres.map((g) => (
+              <option key={g} value={g}>
+                {g}
               </option>
             ))}
           </select>
         </div>
 
-        {hasFilters ? (
+        {hasFilters && (
           <button type="button" className="btn-secondary" onClick={resetFilters}>
             Clear
           </button>
-        ) : null}
+        )}
       </section>
 
-      <Toast
-        severity="error"
-        message={error}
-        className="mb-4"
-        onClose={() => setError('')}
-      />
+      {/* Toast Notifications */}
+      {error && (
+        <Toast
+          severity="error"
+          message={error}
+          className="mb-4"
+          onClose={() => setError('')}
+        />
+      )}
+      {successToast && (
+        <Toast
+          severity="success"
+          message={successToast}
+          className="mb-4"
+          onClose={() => setSuccessToast('')}
+        />
+      )}
 
-      <p className="sr-only" role="status" aria-live="polite">
-        {loading
-          ? 'Loading books'
-          : `${totalBooks} ${totalBooks === 1 ? 'book' : 'books'} found`}
-      </p>
+      {loading ? (
+        <Skeleton count={6} className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" />
+      ) : null}
 
-      {loading ? <Skeleton count={6} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" /> : null}
-
-      {showEmptyState ? (
-        <div className="card text-center">
-          <p className="text-ink-700">
-            {hasFilters ? 'No books match your search or filter.' : 'No books found.'}
+      {showEmptyState && (
+        <div className="card text-center py-12">
+          <svg className="mx-auto h-12 w-12 text-ink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          <h3 className="mt-3 text-base font-semibold text-ink-800">No books found</h3>
+          <p className="mt-1 text-sm text-ink-500">
+            {hasFilters ? 'No titles match your current search or genre filter.' : 'The catalog is currently empty.'}
           </p>
-          {hasFilters ? (
+          {hasFilters && (
             <button type="button" className="btn-secondary mt-4" onClick={resetFilters}>
-              Clear search and filters
-            </button>
-          ) : (
-            <button type="button" className="btn-secondary mt-4" onClick={fetchBooks}>
-              Try again
+              Reset Filters
             </button>
           )}
         </div>
-      ) : null}
+      )}
 
-      {!loading && books.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {!loading && books.length > 0 && (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {books.map((book) => (
-            <BookCard key={book.id} book={book} />
+            <BookCard
+              key={book.id}
+              book={book}
+              onBorrow={handleOpenBorrowModal}
+            />
           ))}
         </div>
-      ) : null}
+      )}
 
-      {!loading && totalBooks > 0 ? (
+      {/* Pagination Bar */}
+      {!loading && totalBooks > 0 && (
         <nav
-          className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-between"
+          className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between border-t border-cream-300 pt-4"
           aria-label="Pagination"
         >
           <p className="text-sm text-ink-600">
-            Page {currentPage} of {totalPages} &middot; {totalBooks}{' '}
-            {totalBooks === 1 ? 'book' : 'books'}
+            Page <span className="font-semibold">{currentPage}</span> of{' '}
+            <span className="font-semibold">{totalPages}</span> &middot; {totalBooks}{' '}
+            {totalBooks === 1 ? 'title' : 'titles'}
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="btn-secondary"
+              className="btn-secondary py-1.5 px-3 text-xs"
               onClick={() => goToPage(currentPage - 1)}
               disabled={!hasPrevious || loading}
             >
@@ -311,22 +323,17 @@ export default function BookCatalogPage() {
                       onClick={() => goToPage(item)}
                       disabled={loading}
                       aria-current={item === currentPage ? 'page' : undefined}
-                      aria-label={`Page ${item}`}
                       className={
                         item === currentPage
-                          ? 'h-9 w-9 rounded-lg bg-brand-600 text-sm font-medium text-white'
-                          : 'h-9 w-9 rounded-lg border border-ink-300 bg-white text-sm text-ink-800 hover:bg-ink-100'
+                          ? 'h-8 w-8 rounded-lg bg-brand-700 text-xs font-semibold text-white'
+                          : 'h-8 w-8 rounded-lg border border-cream-300 bg-white text-xs text-ink-700 hover:bg-cream-100'
                       }
                     >
                       {item}
                     </button>
                   </li>
                 ) : (
-                  <li
-                    key={item}
-                    className="px-1 text-sm text-ink-500"
-                    aria-hidden="true"
-                  >
+                  <li key={item} className="px-1 text-xs text-ink-400">
                     &hellip;
                   </li>
                 ),
@@ -335,36 +342,30 @@ export default function BookCatalogPage() {
 
             <button
               type="button"
-              className="btn-secondary"
+              className="btn-secondary py-1.5 px-3 text-xs"
               onClick={() => goToPage(currentPage + 1)}
               disabled={!hasNext || loading}
             >
               Next
             </button>
           </div>
-
-          <form className="flex items-end gap-2" onSubmit={handleJumpSubmit}>
-            <div>
-              <label className="input-label" htmlFor="page-jump">
-                Go to page
-              </label>
-              <input
-                id="page-jump"
-                type="number"
-                min={1}
-                max={totalPages}
-                value={jumpValue}
-                onChange={(event) => setJumpValue(event.target.value)}
-                placeholder={String(currentPage)}
-                className="w-20 rounded-lg border border-ink-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <button type="submit" className="btn-secondary" disabled={loading}>
-              Go
-            </button>
-          </form>
         </nav>
-      ) : null}
+      )}
+
+      {/* Live Borrow Confirmation Dialog */}
+      <BorrowModal
+        book={borrowTargetBook}
+        isOpen={Boolean(borrowTargetBook)}
+        onClose={() => {
+          setBorrowTargetBook(null);
+          setBorrowModalError('');
+          setBorrowModalSuccess('');
+        }}
+        onBorrow={handleConfirmBorrow}
+        borrowing={borrowingBusy}
+        error={borrowModalError}
+        success={borrowModalSuccess}
+      />
     </main>
   );
 }

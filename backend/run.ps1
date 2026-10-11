@@ -27,11 +27,13 @@ if (-not (Test-Path ".env")) {
 
 # Activate virtual environment
 if (Test-Path "venv\Scripts\Activate.ps1") {
-    Write-Host "[INFO] Activating virtual environment..." -ForegroundColor Green
+    Write-Host "[INFO] Activating virtual environment (venv)..." -ForegroundColor Green
     & "venv\Scripts\Activate.ps1"
+} elseif (Test-Path ".venv\Scripts\Activate.ps1") {
+    Write-Host "[INFO] Activating virtual environment (.venv)..." -ForegroundColor Green
+    & ".venv\Scripts\Activate.ps1"
 } else {
-    Write-Host "[ERROR] Virtual environment not found. Run: python -m venv venv && .\venv\Scripts\pip install -r requirements.txt" -ForegroundColor Red
-    exit 1
+    Write-Host "[WARNING] No virtual environment found in venv or .venv; continuing with current Python environment..." -ForegroundColor Yellow
 }
 
 # Seed database

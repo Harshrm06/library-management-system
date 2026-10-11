@@ -251,7 +251,7 @@ export default function BookDetailPage() {
       <article className="card">
         <div className="grid gap-6 lg:grid-cols-[180px_1fr]">
           <div
-            className="flex h-48 w-full items-center justify-center rounded-lg bg-ink-100 text-2xl font-semibold text-ink-500 lg:h-56"
+            className="flex h-56 w-full items-center justify-center rounded-xl bg-gradient-to-br from-brand-900 to-brand-950 text-3xl font-serif font-bold text-cream-100 shadow-md border border-brand-800 lg:h-64"
             aria-hidden="true"
           >
             {titleInitials(book)}
@@ -259,11 +259,11 @@ export default function BookDetailPage() {
 
           <div>
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <h1 className="text-2xl lg:text-3xl">{book.title}</h1>
+              <h1 className="font-serif text-2xl lg:text-3xl text-brand-950 font-bold">{book.title}</h1>
               <span
                 className={cx(
-                  'rounded-full px-3 py-1 text-xs font-medium',
-                  isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
+                  'rounded-full px-3 py-1 text-xs font-semibold border',
+                  isAvailable ? 'bg-forest-50 text-forest-800 border-forest-300' : 'bg-rose-50 text-rose-800 border-rose-300',
                 )}
               >
                 {isAvailable ? 'Available' : 'Not Available'}
