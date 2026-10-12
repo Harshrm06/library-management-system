@@ -97,27 +97,6 @@ export const adminService = {
   deleteBook(bookId) {
     return api.delete(ADMIN_ENDPOINTS.BOOKS_DETAIL(bookId)).then(r => unwrapPayload(r.data));
   },
-
-  // Borrowing History
-  getBorrowingHistory(skip = 0, limit = 10, filters = {}) {
-    const page = Math.floor(skip / limit) + 1;
-    const page_size = limit;
-    const params = { page, page_size, skip, limit };
-    if (filters.status) params.status = filters.status;
-    const from = filters.from_date || filters.start_date;
-    const to = filters.to_date || filters.end_date;
-    if (from) {
-      params.from_date = from;
-      params.start_date = from;
-    }
-    if (to) {
-      params.to_date = to;
-      params.end_date = to;
-    }
-    if (filters.search) params.search = filters.search;
-    if (filters.user_id) params.user_id = filters.user_id;
-    return api.get(ADMIN_ENDPOINTS.BORROWINGS_HISTORY, { params }).then(r => unwrapPayload(r.data));
-  },
 };
 
 export default adminService;

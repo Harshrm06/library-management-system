@@ -149,7 +149,7 @@ export default function AdminDashboardPage() {
 
           {/* Quick Action Navigation Grid */}
           <h2 className="mb-4 text-xl font-serif font-bold text-brand-900">Administrative Actions</h2>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3 mb-8">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 mb-8">
             {/* Manage Books */}
             <div className="card hover:shadow-card-hover transition-all">
               <div className="flex items-center gap-3 mb-3">
@@ -189,27 +189,6 @@ export default function AdminDashboardPage() {
               </p>
               <Link to={ROUTES.adminUsers} className="btn-primary w-full text-center">
                 Open Member Management →
-              </Link>
-            </div>
-
-            {/* Circulation History */}
-            <div className="card hover:shadow-card-hover transition-all">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="rounded-xl bg-amber-100 p-3 text-amber-800">
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-ink-900">Circulation Records</h3>
-                  <p className="text-xs text-ink-500">Supervise all patron loans & fines</p>
-                </div>
-              </div>
-              <p className="text-sm text-ink-600 mb-4">
-                Track full lending history across all members with filters for loan dates, return status, and accrued late penalties.
-              </p>
-              <Link to={ROUTES.adminBorrowingHistory} className="btn-secondary w-full text-center">
-                Open Circulation Desk →
               </Link>
             </div>
           </div>

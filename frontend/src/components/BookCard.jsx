@@ -2,10 +2,11 @@
  * Catalog card for a single book.
  *
  * Implements a cohesive library aesthetic with cover art placeholders,
- * stock badges, and direct Borrow action support for both Members and Admins.
+ * stock badges, and direct Borrow action support for Members.
  */
 
 import { Link } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 import { cx, truncate } from '../utils/helpers';
 import { ROUTES } from '../utils/constants';
@@ -28,6 +29,7 @@ const SPINE_THEMES = [
 ];
 
 export default function BookCard({ book, onBorrow }) {
+  const { isAdmin } = useAuth();
   const available = book?.available_quantity ?? 0;
   const total = book?.total_quantity ?? 0;
   const isAvailable = book?.is_available ?? available > 0;
@@ -115,22 +117,24 @@ export default function BookCard({ book, onBorrow }) {
           View Details →
         </Link>
 
-        {onBorrow ? (
-          <button
-            type="button"
-            onClick={() => onBorrow(book)}
-            disabled={!isAvailable}
-            className="rounded-lg bg-forest-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-forest-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Borrow Book
-          </button>
-        ) : (
-          <Link
-            to={detailsPath}
-            className="rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors"
-          >
-            Borrow
-          </Link>
+        {!isAdmin && (
+          onBorrow ? (
+            <button
+              type="button"
+              onClick={() => onBorrow(book)}
+              disabled={!isAvailable}
+              className="rounded-lg bg-forest-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-forest-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Borrow Book
+            </button>
+          ) : (
+            <Link
+              to={detailsPath}
+              className="rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors"
+            >
+              Borrow
+            </Link>
+          )
         )}
       </div>
     </article>

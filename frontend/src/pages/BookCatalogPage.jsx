@@ -1,7 +1,7 @@
 /**
  * Book catalog page: search, filter and paginate the collection.
  *
- * Supports both Members and Admins borrowing books directly from the catalog
+ * Supports Members borrowing books directly from the catalog
  * with a live 14-day loan confirmation dialog.
  */
 
@@ -13,6 +13,7 @@ import BorrowModal from '../components/BorrowModal';
 import Skeleton from '../components/Skeleton';
 import Toast from '../components/Toast';
 import useDebounce from '../hooks/useDebounce';
+import { useAuth } from '../hooks/useAuth';
 import { getAllBooks } from '../services/bookService';
 import borrowService from '../services/borrowService';
 import { PAGINATION } from '../utils/constants';
@@ -43,6 +44,7 @@ function buildPageItems(currentPage, totalPages) {
 }
 
 export default function BookCatalogPage() {
+  const { isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
   const genreFromUrl = searchParams.get('genre') ?? '';
 
@@ -139,6 +141,7 @@ export default function BookCatalogPage() {
 
   // Borrow Flow
   const handleOpenBorrowModal = (book) => {
+    if (isAdmin) return;
     setBorrowTargetBook(book);
     setBorrowModalError('');
     setBorrowModalSuccess('');
@@ -286,7 +289,7 @@ export default function BookCatalogPage() {
             <BookCard
               key={book.id}
               book={book}
-              onBorrow={handleOpenBorrowModal}
+              onBorrow={isAdmin ? null : handleOpenBorrowModal}
             />
           ))}
         </div>
@@ -353,19 +356,21 @@ export default function BookCatalogPage() {
       )}
 
       {/* Live Borrow Confirmation Dialog */}
-      <BorrowModal
-        book={borrowTargetBook}
-        isOpen={Boolean(borrowTargetBook)}
-        onClose={() => {
-          setBorrowTargetBook(null);
-          setBorrowModalError('');
-          setBorrowModalSuccess('');
-        }}
-        onBorrow={handleConfirmBorrow}
-        borrowing={borrowingBusy}
-        error={borrowModalError}
-        success={borrowModalSuccess}
-      />
+      {!isAdmin && (
+        <BorrowModal
+          book={borrowTargetBook}
+          isOpen={Boolean(borrowTargetBook)}
+          onClose={() => {
+            setBorrowTargetBook(null);
+            setBorrowModalError('');
+            setBorrowModalSuccess('');
+          }}
+          onBorrow={handleConfirmBorrow}
+          borrowing={borrowingBusy}
+          error={borrowModalError}
+          success={borrowModalSuccess}
+        />
+      )}
     </main>
   );
 }

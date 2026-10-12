@@ -15,7 +15,6 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminBooksPage from "./pages/AdminBooksPage";
-import AdminBorrowingHistoryPage from "./pages/AdminBorrowingHistoryPage";
 import BookCatalogPage from "./pages/BookCatalogPage";
 import BookDetailPage from "./pages/BookDetailPage";
 import BorrowingHistoryPage from "./pages/BorrowingHistoryPage";
@@ -67,14 +66,6 @@ export default function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AdminBooksPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path={ROUTES.adminBorrowingHistory}
-            element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminBorrowingHistoryPage />
               </ProtectedRoute>
             }
           />

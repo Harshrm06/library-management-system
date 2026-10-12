@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -195,9 +195,9 @@ UPDATE_REQUEST_EXAMPLE: Dict[str, Any] = {
     "/register",
     response_model=RegisterSuccessResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Register a new member account (Admin only)",
+    summary="Register a new member account",
     description=(
-        "Restricted to administrators. Creates an account with the `member` role and returns "
+        "Creates an account with the `member` role and returns "
         "the created user. Passwords must be at least 6 characters and contain a letter "
         "and a digit. A duplicate email is rejected with 409 Conflict."
     ),
@@ -206,26 +206,40 @@ UPDATE_REQUEST_EXAMPLE: Dict[str, Any] = {
 )
 async def register(
     payload: UserRegisterRequest,
-    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
-    """Create a member account (restricted to administrators).
+    """Create a member account.
 
     Args:
         payload: Registration data: email, password, first and last name,
             with optional phone and address.
-        _admin: Authenticated administrator dependency.
         db: Database session dependency.
+        authorization: Optional bearer token header.
 
     Returns:
         dict: 201 with `{success, message, data: {user}, timestamp}`.
 
     Raises:
-        UnauthorizedError: If unauthenticated (401).
-        PermissionDeniedError: If caller is not admin (403).
+        UnauthorizedError: If invalid token provided.
+        PermissionDeniedError: If caller is authenticated as a member.
         ConflictError: If the email is already registered (409).
         ValidationError: If the payload fails validation (422).
     """
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            from app.utils.jwt_utils import verify_token
+            decoded = verify_token(token)
+            if decoded and decoded.get("role") == "member":
+                from app.utils.exceptions import PermissionDeniedError
+                raise PermissionDeniedError(
+                    "Members cannot create member accounts",
+                    code="permission_denied",
+                )
+        except Exception as e:
+            if "permission_denied" in str(e) or isinstance(e, PermissionDeniedError):
+                raise
     return await auth_controller.register_user(payload, db)
 
 

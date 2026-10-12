@@ -23,6 +23,10 @@ export default function BorrowingHistoryPage() {
       navigate(ROUTES.login);
       return;
     }
+    if (user.role === 'admin') {
+      navigate(ROUTES.adminDashboard, { replace: true });
+      return;
+    }
     loadHistory();
   }, [user, navigate, skip, status]);
 

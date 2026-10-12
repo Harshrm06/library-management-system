@@ -30,7 +30,6 @@ export const ADMIN_ENDPOINTS = {
   USERS_ROLE: (id) => `${API_PREFIX}/admin/users/${id}/role`,
   BOOKS_LIST: `${API_PREFIX}/admin/books`,
   BOOKS_DETAIL: (id) => `${API_PREFIX}/admin/books/${id}`,
-  BORROWINGS_HISTORY: `${API_PREFIX}/admin/borrowings`,
 };
 
 export const BORROW_ENDPOINTS = {
@@ -61,7 +60,6 @@ export const ROUTES = {
   adminDashboard: '/admin',
   adminUsers: '/admin/users',
   adminBooks: '/admin/books',
-  adminBorrowingHistory: '/admin/borrowing-history',
   unauthorized: '/unauthorized',
   home: '/',
 };

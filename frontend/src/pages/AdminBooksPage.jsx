@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { adminService } from '../services/adminService';
-import borrowService from '../services/borrowService';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../utils/constants';
 
@@ -40,8 +39,7 @@ export default function AdminBooksPage() {
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Borrow action state for admin
-  const [borrowingId, setBorrowingId] = useState(null);
+
 
   // Delete confirmation
   const [deletingBook, setDeletingBook] = useState(null);
@@ -214,32 +212,6 @@ export default function AdminBooksPage() {
     }
   };
 
-  const handleAdminBorrow = async (book) => {
-    if ((book.available_quantity ?? 0) <= 0) {
-      setError(`"${book.title}" is out of stock.`);
-      return;
-    }
-
-    setBorrowingId(book.id);
-    setError(null);
-    try {
-      const res = await borrowService.borrowBook(book.id);
-      if (res.success) {
-        setSuccess(`Successfully borrowed "${book.title}". View under "My Loans".`);
-        loadBooks();
-        setTimeout(() => setSuccess(null), 4000);
-      } else {
-        setError(res.message || 'Unable to borrow this title.');
-        setTimeout(() => setError(null), 5000);
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Borrowing failed.');
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setBorrowingId(null);
-    }
-  };
-
   return (
     <main className="page-container">
       {/* Header & Controls */}
@@ -390,16 +362,6 @@ export default function AdminBooksPage() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Admin Borrow Action */}
-                          <button
-                            type="button"
-                            onClick={() => handleAdminBorrow(book)}
-                            disabled={!isAvailable || borrowingId === book.id}
-                            title="Borrow this book as Admin"
-                            className="rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 border border-brand-200 hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {borrowingId === book.id ? 'Borrowing…' : 'Borrow'}
-                          </button>
                           {/* Edit */}
                           <button
                             type="button"

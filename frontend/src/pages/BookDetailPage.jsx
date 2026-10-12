@@ -23,6 +23,7 @@ import BorrowModal from '../components/BorrowModal';
 import Skeleton from '../components/Skeleton';
 import Toast from '../components/Toast';
 import NotFoundPage from './NotFoundPage';
+import { useAuth } from '../hooks/useAuth';
 import { getAllBooks, getBookById } from '../services/bookService';
 import { borrowBook, hasActiveLoan } from '../services/borrowService';
 import { ROUTES } from '../utils/constants';
@@ -74,6 +75,7 @@ function DetailSkeleton() {
 export default function BookDetailPage() {
   const { bookId } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -135,7 +137,7 @@ export default function BookDetailPage() {
   // The server is the authority on whether this reader already holds a copy, but
   // a failed lookup must not disable a legitimate borrow.
   useEffect(() => {
-    if (!book || (book.available_quantity ?? 0) <= 0) return;
+    if (isAdmin || !book || (book.available_quantity ?? 0) <= 0) return;
     let cancelled = false;
 
     async function checkLoan() {
@@ -150,6 +152,7 @@ export default function BookDetailPage() {
   }, [book, bookId]);
 
   async function handleBorrow() {
+    if (isAdmin) return;
     setBorrowing(true);
     setBorrowError('');
     setBorrowSuccess('');
@@ -282,33 +285,42 @@ export default function BookDetailPage() {
               ) : null}
             </div>
 
-            <div className="mt-6">
-              {available > 0 && !alreadyBorrowed ? (
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => setShowBorrowModal(true)}
-                >
-                  Borrow
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled
-                  aria-describedby="borrow-unavailable-reason"
-                >
-                  {alreadyBorrowed ? 'Already borrowed' : 'Not Available'}
-                </button>
-              )}
-              <p id="borrow-unavailable-reason" className="mt-2 text-xs text-ink-500">
-                {alreadyBorrowed
-                  ? 'You already have a copy of this title on loan.'
-                  : available > 0
-                    ? `${available} of ${total} ${total === 1 ? 'copy is' : 'copies are'} available.`
-                    : `Every copy is currently on loan. ${total} ${total === 1 ? 'copy' : 'copies'} in the library.`}
-              </p>
-            </div>
+            {!isAdmin ? (
+              <div className="mt-6">
+                {available > 0 && !alreadyBorrowed ? (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => setShowBorrowModal(true)}
+                  >
+                    Borrow
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled
+                    aria-describedby="borrow-unavailable-reason"
+                  >
+                    {alreadyBorrowed ? 'Already borrowed' : 'Not Available'}
+                  </button>
+                )}
+                <p id="borrow-unavailable-reason" className="mt-2 text-xs text-ink-500">
+                  {alreadyBorrowed
+                    ? 'You already have a copy of this title on loan.'
+                    : available > 0
+                      ? `${available} of ${total} ${total === 1 ? 'copy is' : 'copies are'} available.`
+                      : `Every copy is currently on loan. ${total} ${total === 1 ? 'copy' : 'copies'} in the library.`}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 rounded-xl border border-cream-300 bg-cream-50 p-4">
+                <p className="text-xs font-semibold text-brand-900 uppercase tracking-wider">Administrative Notice</p>
+                <p className="mt-1 text-xs text-ink-600">
+                  Admins cannot borrow books. To adjust quantities or update book information, please use the Admin Console.
+                </p>
+              </div>
+            )}
 
             <dl className="mt-6 grid gap-3 sm:grid-cols-2">
               <div>
@@ -365,19 +377,21 @@ export default function BookDetailPage() {
         </button>
       </div>
 
-      <BorrowModal
-        book={book}
-        isOpen={showBorrowModal}
-        onClose={() => {
-          setShowBorrowModal(false);
-          setBorrowError('');
-          setBorrowSuccess('');
-        }}
-        onBorrow={handleBorrow}
-        borrowing={borrowing}
-        error={borrowError}
-        success={borrowSuccess}
-      />
+      {!isAdmin && (
+        <BorrowModal
+          book={book}
+          isOpen={showBorrowModal}
+          onClose={() => {
+            setShowBorrowModal(false);
+            setBorrowError('');
+            setBorrowSuccess('');
+          }}
+          onBorrow={handleBorrow}
+          borrowing={borrowing}
+          error={borrowError}
+          success={borrowSuccess}
+        />
+      )}
     </main>
   );
 }

@@ -26,8 +26,6 @@ const ADMIN_NAV_LINKS = [
   { to: ROUTES.catalog, label: 'Catalog' },
   { to: ROUTES.adminBooks, label: 'Manage Books' },
   { to: ROUTES.adminUsers, label: 'Manage Members' },
-  { to: ROUTES.adminBorrowingHistory, label: 'Circulation' },
-  { to: ROUTES.borrowingHistory, label: 'My Loans' },
 ];
 
 function navLinkClass({ isActive }) {
